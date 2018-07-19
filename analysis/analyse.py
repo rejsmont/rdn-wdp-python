@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import numpy as np
 import pandas as pd
 import math
 import peakutils
 import scipy.spatial as spa
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from PIL import Image
 from multiprocessing import Pool
@@ -254,7 +257,7 @@ def nuclei_angle(n1, n2):
 
 
 # Input dir #
-inputDir = '/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples/'
+inputDir = sys.argv[1]
 
 
 def process_dir_sample(sample):
@@ -266,5 +269,5 @@ samples = [f for f in os.listdir(inputDir) if
            os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
 
 if __name__ == '__main__':
-    with Pool(6) as p:
+    with Pool(sys.argv[2]) as p:
         p.map(process_dir_sample, samples)
