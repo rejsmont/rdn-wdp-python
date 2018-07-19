@@ -266,4 +266,4 @@ samples = [f for f in os.listdir(inputDir) if
 
 if __name__ == '__main__':
     with Pool(6) as p:
-        print(p.map(process_dir_sample, samples))
+        p.map(process_dir_sample, samples)
