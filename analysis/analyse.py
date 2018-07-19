@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import numpy as np
+import pandas as pd
+import math
+import peakutils
+import scipy.spatial as spa
+import matplotlib.pyplot as plt
+from PIL import Image
+
+
+def process_sample(directory, sample):
+    # Input file #
+    inputFile = os.path.join(directory, sample)
+    baseName = os.path.splitext(sample)[0]
+    nuclei = pd.read_csv(inputFile)
+
+    # Filter discs by mean volume +/- 50%
+    volumeMean = nuclei['Volume'].mean()
+    nuclei = nuclei[(nuclei['Volume'] > volumeMean * 0.5) & (nuclei['Volume'] < volumeMean * 1.5)]
+
+    # Compute mean nucleus diameter
+    unitD = 2 * math.pow((3 * volumeMean) / (4 * math.pi), 1.0 / 3.0)
+
+    # Scale units to mean diameter
+    nuclei['cx'] = nuclei['cx'] / unitD
+    nuclei['cy'] = nuclei['cy'] / unitD
+    nuclei['cz'] = nuclei['cz'] / unitD
+
+    origin = find_origin(nuclei)
+    if origin < 2:
+        nuclei['cy'] = nuclei['cy'].max() - nuclei['cy']
+    if origin % 2 != 0:
+        nuclei['cx'] = nuclei['cx'].max() - nuclei['cx']
+
+    nuclei['mCherry'] = nuclei['Mean 1']
+    nuclei['Venus'] = nuclei['Mean 2']
+    nuclei['DAPI'] = nuclei['Mean 0']
+    furrow = detect_mf(nuclei, disc_matrix(nuclei, 'Mean 1'))
+    thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumb_raw"))
+
+    unitI = nuclei.loc[round(nuclei['cy']) == round(nuclei['cx'].map(furrow)), 'Mean 1'].mean()
+    nuclei['mCherry'] = nuclei['Mean 1'] / unitI
+    nuclei['Venus'] = nuclei['Mean 2'] / unitI
+    nuclei['DAPI'] = nuclei['Mean 0'] / unitI
+    nuclei.loc[nuclei['cy'] > nuclei['cx'].map(furrow) + 10, 'mCherry'] = nuclei['mCherry'].min()
+    thumbnail(nuclei, furrow, os.path.join(directory, baseName + "_thumb_normalized"))
+
+    nuclei_p = pd.DataFrame()
+    nuclei_p['cx'] = nuclei['cx']
+    nuclei_p['cy'] = nuclei['cy'] - nuclei['cx'].map(furrow)
+    nuclei_p['cz'] = nuclei['cz']
+    nuclei_p['mCherry'] = nuclei['mCherry']
+    nuclei_p['Venus'] = nuclei['Venus']
+    nuclei_p['DAPI'] = nuclei['DAPI']
+    nuclei_p['Volume'] = nuclei['Volume']
+    nuclei_p['ext_mCherry'] = np.NaN
+    nuclei_p['ext_Venus'] = np.NaN
+    nuclei_p['ang_max_mCherry'] = np.NaN
+    nuclei_p['ang_max_Venus'] = np.NaN
+    nuclei_p.reset_index()
+
+    thumbnail(nuclei_p, None, os.path.join(directory, baseName + "_thumb_aligned"))
+
+    KDtree = spa.cKDTree(nuclei_p[['cx', 'cy', 'cz']].values)
+
+    count = len(nuclei_p.index)
+    for index, nucleus in nuclei_p.iterrows():
+        distances, indices = KDtree.query(nucleus[['cx', 'cy', 'cz']].values, range(2, 28), distance_upper_bound=2)
+        indices = indices[indices < count]
+        neighbors = nuclei_p.iloc[indices]
+        nuclei_p.at[index, 'ext_mCherry'] = nucleus['mCherry'] / neighbors['mCherry'].mean()
+        nuclei_p.at[index, 'ext_Venus'] = nucleus['Venus'] / neighbors['Venus'].mean()
+        max_cherry_value = neighbors['mCherry'].max()
+        max_venus_value = neighbors['Venus'].max()
+        max_cherry_neighbor = neighbors.loc[neighbors['mCherry'] == max_cherry_value]
+        max_venus_neighbor = neighbors.loc[neighbors['Venus'] == max_venus_value]
+        if len(max_cherry_neighbor.index) == 1:
+            nuclei_p.at[index, 'ang_max_mCherry'] = nuclei_angle(nucleus, max_cherry_neighbor)
+        if len(max_venus_neighbor.index) == 1:
+            nuclei_p.at[index, 'ang_max_Venus'] = nuclei_angle(nucleus, max_venus_neighbor)
+
+    nuclei_p.to_csv(os.path.join(directory, baseName + "_normalized.csv"))
+
+
+def find_origin(nuclei, range=5):
+
+    max_x = nuclei['cx'].max()
+    max_y = nuclei['cy'].max()
+
+    top_left = nuclei.loc[(round(nuclei['cy']) < range) & (round(nuclei['cx']) < range), 'Mean 1'].count()
+    top_right =\
+        nuclei.loc[(round(nuclei['cy']) < range) & (round(nuclei['cx']) > round(max_x - range)), 'Mean 1'].count()
+    btm_left =\
+        nuclei.loc[(round(nuclei['cy']) > round(max_y - range)) & (round(nuclei['cx']) < range), 'Mean 1'].count()
+    btm_right =\
+        nuclei.loc[(round(nuclei['cy']) > round(max_y - range)) & (round(nuclei['cx']) > round(max_x - range)),
+                   'Mean 1'].count()
+
+    corners = [top_left, top_right, btm_left, btm_right]
+
+    return corners.index(min(corners))
+
+
+def disc_matrix(input_data, fields):
+    """
+    :param input_data:  Nuclei from csv as Pandas DataFrame
+    :param fields:       Field to read intensities from
+    :return:            2D Numpy array with intensity values
+    """
+
+    data = pd.DataFrame()
+
+    # Compute rounded coordinates
+    data['ux'] = round(input_data['cx'])
+    data['uy'] = round(input_data['cy'])
+    data['uz'] = round(input_data['cz'])
+    data['int'] = input_data[fields]
+
+    # Compute bounds
+    x_min = int(data['ux'].min())
+    x_max = int(data['ux'].max())
+    y_min = int(data['uy'].min())
+    y_max = int(data['uy'].max())
+
+    # Initialize empty array
+    matrix = np.zeros([x_max, y_max])
+
+    for x in range(x_min, x_max):
+        for y in range(y_min, y_max):
+            z = data[(data['ux'] == x) & (data['uy'] == y)]['int'].max()
+            matrix[x, y] = z
+
+    smooth = np.zeros([x_max, y_max])
+
+    for x in range(x_min, x_max):
+        for y in range(y_min, y_max):
+            if math.isnan(matrix[x, y]):
+                i = 0
+                z = 0
+                for ix in range(x - 1, x + 2):
+                    if x_min <= ix < x_max:
+                        for iy in range(y - 1, y + 2):
+                            if y_min <= iy < y_max:
+                                v = matrix[ix, iy]
+                                if not math.isnan(v):
+                                    z = z + v
+                                    i = i + 1
+                if i:
+                    smooth[x, y] = z / i
+                else:
+                    smooth[x, y] = 0
+            else:
+                smooth[x, y] = matrix[x, y]
+
+    return smooth
+
+
+def matrix_mf(matrix, pdist, pthr, ithr, deg):
+    x_max = matrix.shape[0]
+    line = np.zeros(x_max)
+    for x in range(0, x_max):
+        z = matrix[x, :]
+        indices = peakutils.indexes(z, min_dist=pdist, thres=pthr)
+        if indices.any():
+            for peak in indices:
+                if matrix[x, peak] > ithr:
+                    line[x] = peak
+                    break
+        else:
+            line[x] = 0
+
+    f = np.polyfit(np.arange(0, x_max), line, deg)
+    return np.poly1d(f)
+
+
+def detect_mf(input_data, matrix=None):
+    if matrix is None:
+        matrix = disc_matrix(input_data, 'Mean 1', True)
+    line = matrix_mf(matrix, int(round(matrix.shape[1]/2)), 0.1, 10, 1)
+    filtered = input_data.loc[round(input_data['cy']) <= round(input_data['cx'].map(line) + 10)]
+    threshold = input_data['Mean 1'].mean() + filtered['Mean 1'].std()
+    filtered = filtered.loc[filtered['Mean 1'] > threshold]
+    fn = np.polyfit(filtered['cx'], filtered['cy'], 8)
+    return np.poly1d(fn)
+
+
+def thumbnail(disc, f=None, basename=""):
+    """ Generate thumbnail of nuclear image """
+
+    min = disc['cy'].min()
+
+    if min < 0:
+        disc['cy'] = disc['cy'] - min
+        f = np.poly1d([0, -min])
+
+    mCherry = np.transpose(disc_matrix(disc, 'mCherry'))
+    Venus = np.transpose(disc_matrix(disc, 'Venus'))
+    DAPI = np.transpose(disc_matrix(disc, 'DAPI'))
+
+    if mCherry.max() > 1:
+        mCherry = (mCherry / mCherry.max() * 255).astype('uint8')
+    if Venus.max() > 1:
+        Venus = (Venus / Venus.max() * 255).astype('uint8')
+    if DAPI.max() > 1:
+        DAPI = (DAPI / DAPI.max() * 255).astype('uint8')
+
+    stack = np.stack((mCherry, DAPI, Venus), axis=2)
+    img = Image.fromarray(stack, 'RGB')
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title('colorMap')
+    plt.imshow(stack)
+    x = np.arange(0, stack.shape[1])
+    if f is not None:
+        plt.plot(x, f(x))
+    ax.set_aspect('equal')
+
+    if basename:
+        img.save(basename + ".tif")
+        plt.savefig(basename + ".png")
+    else:
+        img.show()
+        plt.show()
+
+    img.close()
+    plt.close()
+
+
+def unit_vector(vector):
+    """ Returns the unit vector of the vector. """
+    return vector / np.linalg.norm(vector)
+
+
+def angle_between(v1, v2):
+    """ Returns the angle in degrees between vectors 'v1' and 'v2'. """
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    return np.degrees(np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0)))
+
+
+def nuclei_angle(n1, n2):
+    """ Returns the o'clock position of a nucleus relative to another nucleus """
+    v1 = [0, - n1['cy']]
+    v2 = [n2['cx'].values[0] - n1['cx'], n2['cy'].values[0] - n1['cy']]
+
+    if v1 == [0, 0] or v2 == [0, 0]:
+        return np.NaN
+    else:
+        return angle_between(v1, v2)
+
+
+# Input dir #
+inputDir = '/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples/'
+
+# Sample name #
+# sample = '59565_disc_8_U6I1AU.csv'
+
+samples = [f for f in os.listdir(inputDir) if
+           os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
+
+for sample in samples:
+    print(sample)
+    process_sample(inputDir, sample)
