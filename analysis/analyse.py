@@ -259,6 +259,7 @@ inputDir = '/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples/'
 
 def process_dir_sample(sample):
     process_sample(inputDir, sample)
+    return True
 
 
 samples = [f for f in os.listdir(inputDir) if
