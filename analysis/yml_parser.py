@@ -12,7 +12,6 @@ import csv
 import yaml
 import math
 import numpy as np
-from __future__ import print_function
 from os.path import join, dirname, abspath
 from collections import Counter
 from xlrd.sheet import ctype_text

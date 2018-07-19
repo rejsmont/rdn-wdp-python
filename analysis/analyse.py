@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
 import os
 import numpy as np
 import pandas as pd
@@ -9,6 +8,7 @@ import peakutils
 import scipy.spatial as spa
 import matplotlib.pyplot as plt
 from PIL import Image
+from multiprocessing import Pool
 
 
 def process_sample(directory, sample):
@@ -256,12 +256,14 @@ def nuclei_angle(n1, n2):
 # Input dir #
 inputDir = '/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples/'
 
-# Sample name #
-# sample = '59565_disc_8_U6I1AU.csv'
+
+def process_dir_sample(sample):
+    process_sample(inputDir, sample)
+
 
 samples = [f for f in os.listdir(inputDir) if
            os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
 
-for sample in samples:
-    print(sample)
-    process_sample(inputDir, sample)
+if __name__ == '__main__':
+    with Pool(6) as p:
+        print(p.map(process_dir_sample, samples))
