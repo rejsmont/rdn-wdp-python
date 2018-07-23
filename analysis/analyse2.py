@@ -211,13 +211,21 @@ def thumbnail(disc, f=None, basename="", clipping=None):
         f = np.poly1d([0, -min])
 
     mCherry = np.transpose(disc_matrix(disc, 'mCherry'))
+    mCherry = ((mCherry / (mCherry.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     Venus = np.transpose(disc_matrix(disc, 'Venus'))
+    Venus = ((Venus / (Venus.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     DAPI = np.transpose(disc_matrix(disc, 'DAPI'))
+    DAPI = ((DAPI / (DAPI.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     mCherryM = np.transpose(disc_matrix(disc, 'mCherry', 'mean'))
+    mCherryM = ((mCherryM / (mCherryM.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     VenusM = np.transpose(disc_matrix(disc, 'Venus', 'mean'))
+    VenusM = ((VenusM / (VenusM.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     DAPIM = np.transpose(disc_matrix(disc, 'DAPI', 'mean'))
+    DAPIM = ((DAPIM / (DAPIM.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     DAPIdensity = np.transpose(disc_matrix(disc, 'DAPI', 'sum'))
+    DAPIdensity = ((DAPIdensity / (DAPIdensity.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     DAPIcounts = np.transpose(disc_matrix(disc, 'DAPI', 'count'))
+    DAPIcounts = ((DAPIcounts / (DAPIcounts.mean() * 2)) * 255).clip(0, 255).astype('uint8')
 
     fig = plt.figure()
 
