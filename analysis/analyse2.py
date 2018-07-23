@@ -12,6 +12,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from PIL import Image
 from multiprocessing import Pool
+from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 
 
 def process_sample(directory, sample):
@@ -201,6 +202,17 @@ def detect_mf(input_data, matrix=None):
     return np.poly1d(fn)
 
 
+def channel_matrix(disc, channel, method=None):
+    if method is not None:
+        return np.transpose(disc_matrix(disc, channel, method))
+    else:
+        return np.transpose(disc_matrix(disc, channel))
+
+
+def display_normalize(data):
+    return ((data / (data.mean() * 2)) * 255).clip(0, 255).astype('uint8')
+
+
 def thumbnail(disc, f=None, basename="", clipping=None):
     """ Generate thumbnail of nuclear image """
 
@@ -210,62 +222,83 @@ def thumbnail(disc, f=None, basename="", clipping=None):
         disc['cy'] = disc['cy'] - min
         f = np.poly1d([0, -min])
 
-    mCherry = np.transpose(disc_matrix(disc, 'mCherry'))
-    mCherry = ((mCherry / (mCherry.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    Venus = np.transpose(disc_matrix(disc, 'Venus'))
-    Venus = ((Venus / (Venus.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    DAPI = np.transpose(disc_matrix(disc, 'DAPI'))
-    DAPI = ((DAPI / (DAPI.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    mCherryM = np.transpose(disc_matrix(disc, 'mCherry', 'mean'))
-    mCherryM = ((mCherryM / (mCherryM.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    VenusM = np.transpose(disc_matrix(disc, 'Venus', 'mean'))
-    VenusM = ((VenusM / (VenusM.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    DAPIM = np.transpose(disc_matrix(disc, 'DAPI', 'mean'))
-    DAPIM = ((DAPIM / (DAPIM.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    DAPIdensity = np.transpose(disc_matrix(disc, 'DAPI', 'sum'))
-    DAPIdensity = ((DAPIdensity / (DAPIdensity.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    DAPIcounts = np.transpose(disc_matrix(disc, 'DAPI', 'count'))
-    DAPIcounts = ((DAPIcounts / (DAPIcounts.mean() * 2)) * 255).clip(0, 255).astype('uint8')
+    disc['DAPI_R'] = 1 / disc['DAPI']
+
+    #mCherry = channel_matrix(disc, 'mCherry')
+    #Venus = channel_matrix(disc, 'Venus')
+    #DAPI = channel_matrix(disc, 'DAPI_R')
+    mCherryM = channel_matrix(disc, 'mCherry', 'mean')
+    VenusM = channel_matrix(disc, 'Venus', 'mean')
+    DAPIM = channel_matrix(disc, 'DAPI_R', 'mean')
+
+    def detect_ridges(gray, sigma=3.0):
+        hxx, hyy, hxy = hessian_matrix(gray, sigma)
+        i1, i2 = hessian_matrix_eigvals(hxx, hxy, hyy)
+        return i1, i2
+
+    DHEmin, DHEmax = detect_ridges(DAPIM)
+    CHEmin, CHEmax = detect_ridges(mCherryM)
+
+    # DAPIdensity = np.transpose(disc_matrix(disc, 'DAPI', 'sum'))
+    # DAPIdensity = ((DAPIdensity / (DAPIdensity.mean() * 2)) * 255).clip(0, 255).astype('uint8')
+    # DAPIcounts = np.transpose(disc_matrix(disc, 'DAPI', 'count'))
+    # DAPIcounts = ((DAPIcounts / (DAPIcounts.mean() * 2)) * 255).clip(0, 255).astype('uint8')
 
     fig = plt.figure()
 
+    # ax = fig.add_subplot(321)
+    # ax.set_title('inverse DAPI intensity (max)')
+    # plt.imshow(display_normalize(DAPI), cmap='inferno')
+    # ax.set_aspect('equal')
+    #
+    # ax = fig.add_subplot(322)
+    # ax.set_title('inverse mCherry intensity (max)')
+    # plt.imshow(display_normalize(mCherry), cmap='inferno')
+    # ax.set_aspect('equal')
+
     ax = fig.add_subplot(321)
-    ax.set_title('DAPI intensity (max)')
-    plt.imshow(DAPI, cmap='inferno')
+    ax.set_title('DAPI intensity (mean)')
+    plt.imshow(display_normalize(DAPIM), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(322)
-    ax.set_title('mCherry intensity (max)')
-    plt.imshow(mCherry, cmap='inferno')
+    ax.set_title('mCherry intensity (mean)')
+    plt.imshow(display_normalize(mCherryM), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(323)
-    ax.set_title('DAPI intensity (mean)')
-    plt.imshow(DAPIM, cmap='inferno')
+    ax.set_title('')
+    plt.imshow(display_normalize(DHEmin), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(324)
-    ax.set_title('mCherry intensity (mean)')
-    plt.imshow(mCherryM, cmap='inferno')
+    ax.set_title('')
+    plt.imshow(display_normalize(DHEmax), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(325)
-    ax.set_title('DAPI density')
-    plt.imshow(DAPIdensity, cmap='inferno')
+    ax.set_title('')
+    plt.imshow(display_normalize(CHEmin), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(326)
-    ax.set_title('DAPI counts')
-    plt.imshow(DAPIcounts, cmap='inferno')
+    ax.set_title('')
+    plt.imshow(display_normalize(CHEmax), cmap='inferno')
     ax.set_aspect('equal')
+
+    # ax = fig.add_subplot(325)
+    # ax.set_title('DAPI density')
+    # plt.imshow(DAPIdensity, cmap='inferno')
+    # ax.set_aspect('equal')
+    #
+    # ax = fig.add_subplot(326)
+    # ax.set_title('DAPI counts')
+    # plt.imshow(DAPIcounts, cmap='inferno')
+    # ax.set_aspect('equal')
 
     #plt.show()
     plt.savefig(basename + ".png")
     plt.close('all')
-
-    mCherry = ((mCherry / (mCherry.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    Venus = ((Venus / (Venus.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    DAPI = ((DAPI / (DAPI.mean() * 2)) * 255).clip(0, 255).astype('uint8')
 
 
 def unit_vector(vector):
@@ -291,10 +324,10 @@ def nuclei_angle(n1, n2):
         return angle_between(v1, v2)
 
 
-# Input dir #
-#inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
-#sample = "61069_disc_8_5VUZUB"
-#process_sample(inputDir, sample + '.csv')
+# # Input dir #
+# inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
+# sample = "61069_disc_8_5VUZUB"
+# process_sample(inputDir, sample + '.csv')
 
 
 # Input dir #
