@@ -42,7 +42,7 @@ def process_sample(directory, sample):
     nuclei['Venus'] = nuclei['Mean 2']
     nuclei['DAPI'] = nuclei['Mean 0']
 
-    thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumb_normalized"))
+    thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumbs"))
 
     return None
 
