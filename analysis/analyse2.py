@@ -253,6 +253,7 @@ def thumbnail(disc, f=None, basename="", clipping=None):
 
     #plt.show()
     plt.savefig(basename + ".png")
+    plt.close('all')
 
     mCherry = ((mCherry / (mCherry.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     Venus = ((Venus / (Venus.mean() * 2)) * 255).clip(0, 255).astype('uint8')
