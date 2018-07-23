@@ -232,8 +232,8 @@ def thumbnail(disc, f=None, basename="", clipping=None):
     DAPIM = channel_matrix(disc, 'DAPI_R', 'mean')
 
     def detect_ridges(gray, sigma=3.0):
-        hxx, hyy, hxy = hessian_matrix(gray, sigma)
-        i1, i2 = hessian_matrix_eigvals(hxx, hxy, hyy)
+        hessian = hessian_matrix(gray, sigma, order="rc")
+        i1, i2 = hessian_matrix_eigvals(hessian)
         return i1, i2
 
     DHEmin, DHEmax = detect_ridges(DAPIM)
