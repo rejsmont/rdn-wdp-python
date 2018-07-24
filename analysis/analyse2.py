@@ -216,7 +216,7 @@ def display_normalize(data):
 def detect_ridges(gray, sigma=3.0):
 
     pad = round(sigma * 3)
-    scaled = np.pad(gray, pad, 'maximum')
+    scaled = np.pad(gray, pad, 'edge')
 
     hessian = hessian_matrix(scaled, sigma, order="rc")
     hessian[0] = np.zeros(hessian[0].shape)
