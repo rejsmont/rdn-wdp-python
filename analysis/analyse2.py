@@ -213,6 +213,22 @@ def display_normalize(data):
     return ((data / (data.mean() * 2)) * 255).clip(0, 255).astype('uint8')
 
 
+def detect_ridges(gray, sigma=3.0):
+
+    pad = round(sigma * 3)
+    scaled = np.pad(gray, pad, 'maximum')
+
+    hessian = hessian_matrix(scaled, sigma, order="rc")
+    hessian[0] = np.zeros(hessian[0].shape)
+    hessian[1] = np.zeros(hessian[1].shape)
+
+    i1, i2 = hessian_matrix_eigvals(hessian)
+    i1 = i1[pad:gray.shape[0]+pad, pad:gray.shape[1]+pad]
+    i2 = i2[pad:gray.shape[0]+pad, pad:gray.shape[1]+pad]
+
+    return i1, i2
+
+
 def thumbnail(disc, f=None, basename="", clipping=None):
     """ Generate thumbnail of nuclear image """
 
@@ -231,13 +247,10 @@ def thumbnail(disc, f=None, basename="", clipping=None):
     VenusM = channel_matrix(disc, 'Venus', 'mean')
     DAPIM = channel_matrix(disc, 'DAPI_R', 'mean')
 
-    def detect_ridges(gray, sigma=3.0):
-        hessian = hessian_matrix(gray, sigma, order="rc")
-        i1, i2 = hessian_matrix_eigvals(hessian)
-        return i1, i2
-
     DHEmin, DHEmax = detect_ridges(DAPIM)
     CHEmin, CHEmax = detect_ridges(mCherryM)
+
+    HEmax = DHEmax * CHEmax
 
     # DAPIdensity = np.transpose(disc_matrix(disc, 'DAPI', 'sum'))
     # DAPIdensity = ((DAPIdensity / (DAPIdensity.mean() * 2)) * 255).clip(0, 255).astype('uint8')
@@ -268,22 +281,17 @@ def thumbnail(disc, f=None, basename="", clipping=None):
 
     ax = fig.add_subplot(323)
     ax.set_title('')
-    plt.imshow(display_normalize(DHEmin), cmap='inferno')
+    plt.imshow(display_normalize(DHEmax), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(324)
     ax.set_title('')
-    plt.imshow(display_normalize(DHEmax), cmap='inferno')
+    plt.imshow(display_normalize(CHEmax), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(325)
     ax.set_title('')
-    plt.imshow(display_normalize(CHEmin), cmap='inferno')
-    ax.set_aspect('equal')
-
-    ax = fig.add_subplot(326)
-    ax.set_title('')
-    plt.imshow(display_normalize(CHEmax), cmap='inferno')
+    plt.imshow(display_normalize(HEmax), cmap='inferno')
     ax.set_aspect('equal')
 
     # ax = fig.add_subplot(325)
