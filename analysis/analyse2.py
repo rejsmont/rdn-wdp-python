@@ -313,8 +313,8 @@ def thumbnail(disc, f=None, basename="", clipping=None):
     # ax.set_aspect('equal')
 
     plt.show()
-    #plt.savefig(basename + ".png")
-    #plt.close('all')
+    plt.savefig(basename + ".png")
+    plt.close('all')
 
 
 def unit_vector(vector):
