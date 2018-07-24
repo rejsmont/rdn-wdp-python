@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from multiprocessing import Pool
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
-from skimage.filters import threshold_otsu, threshold_isodata, threshold_yen
+from skimage.filters import threshold_otsu, threshold_isodata, threshold_triangle
 from skimage.morphology import skeletonize
 
 
@@ -256,7 +256,7 @@ def thumbnail(disc, f=None, basename="", clipping=None):
 
     # threshold = threshold_otsu(HEmax)
     # threshold = threshold_isodata(HEmax)
-    threshold = threshold_yen(HEmax)
+    threshold = threshold_triangle(HEmax)
     thresholded = HEmax > threshold
     skeleton = skeletonize(thresholded)
 
