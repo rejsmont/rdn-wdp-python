@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from multiprocessing import Pool
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from skimage.filters import threshold_otsu, threshold_isodata, threshold_yen
+from skimage.morphology import skeletonize
 
 
 def process_sample(directory, sample):
@@ -252,6 +254,12 @@ def thumbnail(disc, f=None, basename="", clipping=None):
 
     HEmax = DHEmax * CHEmax
 
+    # threshold = threshold_otsu(HEmax)
+    # threshold = threshold_isodata(HEmax)
+    threshold = threshold_yen(HEmax)
+    thresholded = HEmax > threshold
+    skeleton = skeletonize(thresholded)
+
     # DAPIdensity = np.transpose(disc_matrix(disc, 'DAPI', 'sum'))
     # DAPIdensity = ((DAPIdensity / (DAPIdensity.mean() * 2)) * 255).clip(0, 255).astype('uint8')
     # DAPIcounts = np.transpose(disc_matrix(disc, 'DAPI', 'count'))
@@ -270,7 +278,7 @@ def thumbnail(disc, f=None, basename="", clipping=None):
     # ax.set_aspect('equal')
 
     ax = fig.add_subplot(321)
-    ax.set_title('DAPI intensity (mean)')
+    ax.set_title('inverse DAPI intensity (mean)')
     plt.imshow(display_normalize(DAPIM), cmap='inferno')
     ax.set_aspect('equal')
 
@@ -280,18 +288,18 @@ def thumbnail(disc, f=None, basename="", clipping=None):
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(323)
-    ax.set_title('')
-    plt.imshow(display_normalize(DHEmax), cmap='inferno')
+    ax.set_title('Max Hessian Eigenvalue (MHE)')
+    plt.imshow(display_normalize(HEmax), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(324)
-    ax.set_title('')
-    plt.imshow(display_normalize(CHEmax), cmap='inferno')
+    ax.set_title('MHE Thresholded')
+    plt.imshow(display_normalize(thresholded), cmap='inferno')
     ax.set_aspect('equal')
 
     ax = fig.add_subplot(325)
-    ax.set_title('')
-    plt.imshow(display_normalize(HEmax), cmap='inferno')
+    ax.set_title('MHE Skeletonized')
+    plt.imshow(display_normalize(skeleton), cmap='inferno')
     ax.set_aspect('equal')
 
     # ax = fig.add_subplot(325)
@@ -304,9 +312,9 @@ def thumbnail(disc, f=None, basename="", clipping=None):
     # plt.imshow(DAPIcounts, cmap='inferno')
     # ax.set_aspect('equal')
 
-    #plt.show()
-    plt.savefig(basename + ".png")
-    plt.close('all')
+    plt.show()
+    #plt.savefig(basename + ".png")
+    #plt.close('all')
 
 
 def unit_vector(vector):
