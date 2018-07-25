@@ -48,7 +48,9 @@ def process_sample(directory, sample):
     nuclei['Venus'] = nuclei['Mean 2']
     nuclei['DAPI'] = nuclei['Mean 0']
 
+    print("    - computing furrow position")
     furrow = find_furrow(nuclei)
+    print("    - generating raw thumbnail")
     thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumb_raw"))
 
     unitI = nuclei.loc[round(nuclei['cy']) == round(round(nuclei['cx']).map(furrow)), 'Mean 1'].mean()
@@ -56,6 +58,7 @@ def process_sample(directory, sample):
     nuclei['Venus'] = nuclei['Mean 2'] / unitI
     nuclei['DAPI'] = nuclei['Mean 0'] / unitI
     nuclei.loc[nuclei['cy'] > round(round(nuclei['cx']).map(furrow)) + 10, 'mCherry'] = nuclei['mCherry'].min()
+    print("    - generating normalized thumbnail")
     thumbnail(nuclei, furrow, os.path.join(directory, baseName + "_thumb_normalized"))
 
     nuclei_p = pd.DataFrame()
@@ -72,8 +75,10 @@ def process_sample(directory, sample):
     nuclei_p['ang_max_Venus'] = np.NaN
     nuclei_p.reset_index()
 
+    print("    - generating aligned thumbnail")
     thumbnail(nuclei_p, None, os.path.join(directory, baseName + "_thumb_aligned"))
 
+    print("    - computing neighbors")
     KDtree = spa.cKDTree(nuclei_p[['cx', 'cy', 'cz']].values)
 
     count = len(nuclei_p.index)
@@ -92,7 +97,10 @@ def process_sample(directory, sample):
         if len(max_venus_neighbor.index) == 1:
             nuclei_p.at[index, 'ang_max_Venus'] = nuclei_angle(nucleus, max_venus_neighbor)
 
+    print("    - generating normalized dataset")
     nuclei_p.to_csv(os.path.join(directory, baseName + "_normalized.csv"))
+    print("    - " + sample + " done")
+
     return nuclei_p
 
 
@@ -377,7 +385,7 @@ def nuclei_angle(n1, n2):
 
 # # Input dir #
 # inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
-# sample = "61069_disc_8_5VUZUB"
+# sample = "58577_disc_1_IU43O6"
 # process_sample(inputDir, sample + '.csv')
 
 
@@ -388,7 +396,10 @@ print("Processing " + inputDir + " with " + str(workers) + " workers.")
 
 
 def process_dir_sample(sample):
-    process_sample(inputDir, sample)
+    try:
+        process_sample(inputDir, sample)
+    except:
+        print("   [Error] - processing sample " + sample + " failed.")
     return True
 
 
