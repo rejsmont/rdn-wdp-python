@@ -5,7 +5,6 @@ import sys
 import numpy as np
 import pandas as pd
 import math
-import peakutils
 import scipy.spatial as spa
 import matplotlib
 matplotlib.use('Agg')
@@ -13,11 +12,15 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from multiprocessing import Pool
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
-from skimage.filters import threshold_otsu, threshold_isodata, threshold_triangle
+from skimage.filters import threshold_triangle
 from skimage.morphology import skeletonize
+from skimage.measure import label
 
 
 def process_sample(directory, sample):
+
+    print(" - processing " + sample)
+
     # Input file #
     inputFile = os.path.join(directory, sample)
     baseName = os.path.splitext(sample)[0]
@@ -45,56 +48,55 @@ def process_sample(directory, sample):
     nuclei['Venus'] = nuclei['Mean 2']
     nuclei['DAPI'] = nuclei['Mean 0']
 
-    thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumbs"))
+    furrow = find_furrow(nuclei)
+    thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumb_raw"))
 
-    return None
+    unitI = nuclei.loc[round(nuclei['cy']) == round(round(nuclei['cx']).map(furrow)), 'Mean 1'].mean()
+    nuclei['mCherry'] = nuclei['Mean 1'] / unitI
+    nuclei['Venus'] = nuclei['Mean 2'] / unitI
+    nuclei['DAPI'] = nuclei['Mean 0'] / unitI
+    nuclei.loc[nuclei['cy'] > round(round(nuclei['cx']).map(furrow)) + 10, 'mCherry'] = nuclei['mCherry'].min()
+    thumbnail(nuclei, furrow)
 
-    # unitI = nuclei.loc[round(nuclei['cy']) == round(nuclei['cx'].map(furrow)), 'Mean 1'].mean()
-    # nuclei['mCherry'] = nuclei['Mean 1'] / unitI
-    # nuclei['Venus'] = nuclei['Mean 2'] / unitI
-    # nuclei['DAPI'] = nuclei['Mean 0'] / unitI
-    # nuclei.loc[nuclei['cy'] > nuclei['cx'].map(furrow) + 10, 'mCherry'] = nuclei['mCherry'].min()
-    # thumbnail(nuclei, furrow)
-    #
-    # nuclei_p = pd.DataFrame()
-    # nuclei_p['cx'] = nuclei['cx']
-    # nuclei_p['cy'] = nuclei['cy'] - nuclei['cx'].map(furrow)
-    # nuclei_p['cz'] = nuclei['cz']
-    # nuclei_p['mCherry'] = nuclei['mCherry']
-    # nuclei_p['Venus'] = nuclei['Venus']
-    # nuclei_p['DAPI'] = nuclei['DAPI']
-    # nuclei_p['Volume'] = nuclei['Volume']
-    # nuclei_p['ext_mCherry'] = np.NaN
-    # nuclei_p['ext_Venus'] = np.NaN
-    # nuclei_p['ang_max_mCherry'] = np.NaN
-    # nuclei_p['ang_max_Venus'] = np.NaN
-    # nuclei_p.reset_index()
-    #
-    # thumbnail(nuclei_p, None)
-    #
-    # KDtree = spa.cKDTree(nuclei_p[['cx', 'cy', 'cz']].values)
-    #
-    # count = len(nuclei_p.index)
-    # for index, nucleus in nuclei_p.iterrows():
-    #     distances, indices = KDtree.query(nucleus[['cx', 'cy', 'cz']].values, range(2, 28), distance_upper_bound=2)
-    #     indices = indices[indices < count]
-    #     neighbors = nuclei_p.iloc[indices]
-    #     nuclei_p.at[index, 'ext_mCherry'] = nucleus['mCherry'] / neighbors['mCherry'].mean()
-    #     nuclei_p.at[index, 'ext_Venus'] = nucleus['Venus'] / neighbors['Venus'].mean()
-    #     max_cherry_value = neighbors['mCherry'].max()
-    #     max_venus_value = neighbors['Venus'].max()
-    #     max_cherry_neighbor = neighbors.loc[neighbors['mCherry'] == max_cherry_value]
-    #     max_venus_neighbor = neighbors.loc[neighbors['Venus'] == max_venus_value]
-    #     if len(max_cherry_neighbor.index) == 1:
-    #         nuclei_p.at[index, 'ang_max_mCherry'] = nuclei_angle(nucleus, max_cherry_neighbor)
-    #     if len(max_venus_neighbor.index) == 1:
-    #         nuclei_p.at[index, 'ang_max_Venus'] = nuclei_angle(nucleus, max_venus_neighbor)
-    #
-    # #nuclei_p.to_csv(os.path.join(directory, baseName + "_normalized.csv"))
-    # return nuclei_p
+    nuclei_p = pd.DataFrame()
+    nuclei_p['cx'] = nuclei['cx']
+    nuclei_p['cy'] = nuclei['cy'] - round(round(nuclei['cx']).map(furrow))
+    nuclei_p['cz'] = nuclei['cz']
+    nuclei_p['mCherry'] = nuclei['mCherry']
+    nuclei_p['Venus'] = nuclei['Venus']
+    nuclei_p['DAPI'] = nuclei['DAPI']
+    nuclei_p['Volume'] = nuclei['Volume']
+    nuclei_p['ext_mCherry'] = np.NaN
+    nuclei_p['ext_Venus'] = np.NaN
+    nuclei_p['ang_max_mCherry'] = np.NaN
+    nuclei_p['ang_max_Venus'] = np.NaN
+    nuclei_p.reset_index()
+
+    thumbnail(nuclei_p, None)
+
+    KDtree = spa.cKDTree(nuclei_p[['cx', 'cy', 'cz']].values)
+
+    count = len(nuclei_p.index)
+    for index, nucleus in nuclei_p.iterrows():
+        distances, indices = KDtree.query(nucleus[['cx', 'cy', 'cz']].values, range(2, 28), distance_upper_bound=2)
+        indices = indices[indices < count]
+        neighbors = nuclei_p.iloc[indices]
+        nuclei_p.at[index, 'ext_mCherry'] = nucleus['mCherry'] / neighbors['mCherry'].mean()
+        nuclei_p.at[index, 'ext_Venus'] = nucleus['Venus'] / neighbors['Venus'].mean()
+        max_cherry_value = neighbors['mCherry'].max()
+        max_venus_value = neighbors['Venus'].max()
+        max_cherry_neighbor = neighbors.loc[neighbors['mCherry'] == max_cherry_value]
+        max_venus_neighbor = neighbors.loc[neighbors['Venus'] == max_venus_value]
+        if len(max_cherry_neighbor.index) == 1:
+            nuclei_p.at[index, 'ang_max_mCherry'] = nuclei_angle(nucleus, max_cherry_neighbor)
+        if len(max_venus_neighbor.index) == 1:
+            nuclei_p.at[index, 'ang_max_Venus'] = nuclei_angle(nucleus, max_venus_neighbor)
+
+    #nuclei_p.to_csv(os.path.join(directory, baseName + "_normalized.csv"))
+    return nuclei_p
 
 
-def find_origin(nuclei, range=5):
+def count_corners(nuclei, range=5):
 
     max_x = nuclei['cx'].max()
     max_y = nuclei['cy'].max()
@@ -109,6 +111,26 @@ def find_origin(nuclei, range=5):
                    'Mean 1'].count()
 
     corners = [top_left, top_right, btm_left, btm_right]
+
+    return corners
+
+
+def find_origin(nuclei, range=5):
+
+    zeroes = 4
+    i = 1
+
+    while zeroes > 1 and i <= range:
+        corners = count_corners(nuclei, i)
+        zeroes = sum(c == 0 for c in corners)
+        i = i + 1
+
+    if zeroes == 0:
+        print("   [Warning] - unable to detect empty corners - nuclei occupy whole field of view.")
+        return 2
+    if zeroes == 4:
+        print("   [Warning] - more than one corner is empty.")
+        return 2
 
     return corners.index(min(corners))
 
@@ -175,35 +197,6 @@ def disc_matrix(input_data, fields, method='max'):
     return smooth
 
 
-def matrix_mf(matrix, pdist, pthr, ithr, deg):
-    x_max = matrix.shape[0]
-    line = np.zeros(x_max)
-    for x in range(0, x_max):
-        z = matrix[x, :]
-        indices = peakutils.indexes(z, min_dist=pdist, thres=pthr)
-        if indices.any():
-            for peak in indices:
-                if matrix[x, peak] > ithr:
-                    line[x] = peak
-                    break
-        else:
-            line[x] = 0
-
-    f = np.polyfit(np.arange(0, x_max), line, deg)
-    return np.poly1d(f)
-
-
-def detect_mf(input_data, matrix=None):
-    if matrix is None:
-        matrix = disc_matrix(input_data, 'Mean 1', True)
-    line = matrix_mf(matrix, int(round(matrix.shape[1]/2)), 0.1, 10, 1)
-    filtered = input_data.loc[round(input_data['cy']) <= round(input_data['cx'].map(line) + 10)]
-    threshold = input_data['Mean 1'].mean() + filtered['Mean 1'].std()
-    filtered = filtered.loc[filtered['Mean 1'] > threshold]
-    fn = np.polyfit(filtered['cx'], filtered['cy'], 8)
-    return np.poly1d(fn)
-
-
 def channel_matrix(disc, channel, method=None):
     if method is not None:
         return np.transpose(disc_matrix(disc, channel, method))
@@ -231,7 +224,92 @@ def detect_ridges(gray, sigma=3.0):
     return i1, i2
 
 
-def thumbnail(disc, f=None, basename="", clipping=None):
+def rms_fit(cx, cy):
+
+    for degree in range(0, 20):
+        fn = np.polyfit(cx, cy, degree)
+        fy = np.polyval(fn, cx)
+        error_mean = ((cy - fy) ** 2).mean()
+        error_max = ((cy - fy) ** 2).max()
+
+        if error_mean < 0.25 and error_max < 1:
+            return fn
+
+
+def find_furrow(disc):
+
+    furrow_disc = pd.DataFrame()
+    furrow_disc['cx'] = disc['cx']
+    furrow_disc['cy'] = disc['cy']
+    furrow_disc['cz'] = disc['cz']
+    furrow_disc['mCherry'] = disc['mCherry']
+    furrow_disc['DAPI'] = 1 / disc['DAPI']
+    dapi_m = channel_matrix(furrow_disc, 'DAPI', 'mean')
+    cherry_m = channel_matrix(furrow_disc, 'mCherry', 'mean')
+
+    dhe_min, dhe_max = detect_ridges(dapi_m)
+    xhe_min, che_max = detect_ridges(cherry_m)
+    he_max = dhe_max * che_max
+
+    threshold = threshold_triangle(he_max)
+    thresholded = he_max > threshold
+    skeleton = skeletonize(thresholded)
+    labels = label(skeleton)
+
+    lines = []
+
+    for line in range(1, labels.max() + 1):
+        image = (labels == line)
+        lines.append((line, image[image == True].size, image.argmax(axis=0)))
+
+    lines = sorted(lines, key=lambda line: line[1], reverse=True)
+
+    for line in lines:
+        line_label = line[0]
+        positions = line[2]
+        for i in range(0, len(positions)):
+            if labels[int(positions[i]), i] != line_label:
+                positions[i] = -1
+
+    for i in range(0, len(lines)):
+        if lines[i] is not None:
+            for j in range(i + 1, len(lines)):
+                if lines[j] is not None:
+                    collisions = 0
+                    positions_i = lines[i][2]
+                    positions_j = lines[j][2]
+                    for k in range(0, len(positions_i)):
+                        if positions_i[k] >= 0 and positions_j[k] >= 0:
+                            collisions = collisions + 1
+                        if collisions >= 3:
+                            lines[j] = None
+                            break
+
+    positions = None
+    for i in range(0, len(lines)):
+        if lines[i] is not None:
+            positions = lines[i][2]
+            break
+
+    if positions is not None:
+        for i in range(0, len(positions)):
+            if positions[i] == -1:
+                for j in range(1, len(lines)):
+                    if lines[j] is not None:
+                        if lines[j][2][i] != -1:
+                            positions[i] = lines[j][2][i]
+                            break
+
+    mask = positions >= 0
+    indices = np.arange(0, len(positions))
+    cx = indices[mask]
+    cy = positions[mask]
+    fn = rms_fit(cx, cy)
+
+    return np.poly1d(fn)
+
+
+def thumbnail(disc, f=None, basename=""):
     """ Generate thumbnail of nuclear image """
 
     min = disc['cy'].min()
@@ -240,81 +318,38 @@ def thumbnail(disc, f=None, basename="", clipping=None):
         disc['cy'] = disc['cy'] - min
         f = np.poly1d([0, -min])
 
-    disc['DAPI_R'] = 1 / disc['DAPI']
+    mCherry = np.transpose(disc_matrix(disc, 'mCherry'))
+    Venus = np.transpose(disc_matrix(disc, 'Venus'))
+    DAPI = np.transpose(disc_matrix(disc, 'DAPI'))
 
-    #mCherry = channel_matrix(disc, 'mCherry')
-    #Venus = channel_matrix(disc, 'Venus')
-    #DAPI = channel_matrix(disc, 'DAPI_R')
-    mCherryM = channel_matrix(disc, 'mCherry', 'mean')
-    VenusM = channel_matrix(disc, 'Venus', 'mean')
-    DAPIM = channel_matrix(disc, 'DAPI_R', 'mean')
+    if mCherry.max() > 1:
+        mCherry = (mCherry / mCherry.max() * 255).astype('uint8')
+    if Venus.max() > 1:
+        Venus = (Venus / Venus.max() * 255).astype('uint8')
+    if DAPI.max() > 1:
+        DAPI = (DAPI / DAPI.max() * 255).astype('uint8')
 
-    DHEmin, DHEmax = detect_ridges(DAPIM)
-    CHEmin, CHEmax = detect_ridges(mCherryM)
-
-    HEmax = DHEmax * CHEmax
-
-    # threshold = threshold_otsu(HEmax)
-    # threshold = threshold_isodata(HEmax)
-    threshold = threshold_triangle(HEmax)
-    thresholded = HEmax > threshold
-    skeleton = skeletonize(thresholded)
-
-    # DAPIdensity = np.transpose(disc_matrix(disc, 'DAPI', 'sum'))
-    # DAPIdensity = ((DAPIdensity / (DAPIdensity.mean() * 2)) * 255).clip(0, 255).astype('uint8')
-    # DAPIcounts = np.transpose(disc_matrix(disc, 'DAPI', 'count'))
-    # DAPIcounts = ((DAPIcounts / (DAPIcounts.mean() * 2)) * 255).clip(0, 255).astype('uint8')
+    stack = np.stack((display_normalize(mCherry), display_normalize(DAPI), display_normalize(Venus)), axis=2)
+    img = Image.fromarray(stack, 'RGB')
 
     fig = plt.figure()
-
-    # ax = fig.add_subplot(321)
-    # ax.set_title('inverse DAPI intensity (max)')
-    # plt.imshow(display_normalize(DAPI), cmap='inferno')
-    # ax.set_aspect('equal')
-    #
-    # ax = fig.add_subplot(322)
-    # ax.set_title('inverse mCherry intensity (max)')
-    # plt.imshow(display_normalize(mCherry), cmap='inferno')
-    # ax.set_aspect('equal')
-
-    ax = fig.add_subplot(321)
-    ax.set_title('inverse DAPI intensity (mean)')
-    plt.imshow(display_normalize(DAPIM), cmap='inferno')
+    ax = fig.add_subplot(111)
+    ax.set_title('colorMap')
+    plt.imshow(stack)
+    x = np.arange(0, stack.shape[1])
+    if f is not None:
+        plt.plot(x, f(x))
     ax.set_aspect('equal')
 
-    ax = fig.add_subplot(322)
-    ax.set_title('mCherry intensity (mean)')
-    plt.imshow(display_normalize(mCherryM), cmap='inferno')
-    ax.set_aspect('equal')
+    if basename:
+        img.save(basename + ".tif")
+        plt.savefig(basename + ".png")
+    else:
+        img.show()
+        plt.show()
 
-    ax = fig.add_subplot(323)
-    ax.set_title('Max Hessian Eigenvalue (MHE)')
-    plt.imshow(display_normalize(HEmax), cmap='inferno')
-    ax.set_aspect('equal')
-
-    ax = fig.add_subplot(324)
-    ax.set_title('MHE Thresholded')
-    plt.imshow(display_normalize(thresholded), cmap='inferno')
-    ax.set_aspect('equal')
-
-    ax = fig.add_subplot(325)
-    ax.set_title('MHE Skeletonized')
-    plt.imshow(display_normalize(skeleton), cmap='inferno')
-    ax.set_aspect('equal')
-
-    # ax = fig.add_subplot(325)
-    # ax.set_title('DAPI density')
-    # plt.imshow(DAPIdensity, cmap='inferno')
-    # ax.set_aspect('equal')
-    #
-    # ax = fig.add_subplot(326)
-    # ax.set_title('DAPI counts')
-    # plt.imshow(DAPIcounts, cmap='inferno')
-    # ax.set_aspect('equal')
-
-    plt.show()
-    plt.savefig(basename + ".png")
-    plt.close('all')
+    img.close()
+    plt.close()
 
 
 def unit_vector(vector):
