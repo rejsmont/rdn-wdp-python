@@ -243,6 +243,8 @@ def rms_fit(cx, cy, deg=10, err_mean=0.5, err_max=2.0):
         if error_mean < err_mean and error_max < err_max:
             return fn
 
+    print("   [Warning] - unable to find good furrow fit.")
+
     return fn
 
 
@@ -316,7 +318,7 @@ def find_furrow(disc):
     cy = positions[mask]
 
     if len(cx) < 2:
-        print("   [Warning] - unable to determine furrow position.")
+        print("   [Warning] - unable to reliably determine furrow position.")
 
     fn = rms_fit(cx, cy)
 
