@@ -56,7 +56,7 @@ def process_sample(directory, sample):
     nuclei['Venus'] = nuclei['Mean 2'] / unitI
     nuclei['DAPI'] = nuclei['Mean 0'] / unitI
     nuclei.loc[nuclei['cy'] > round(round(nuclei['cx']).map(furrow)) + 10, 'mCherry'] = nuclei['mCherry'].min()
-    thumbnail(nuclei, furrow)
+    thumbnail(nuclei, furrow, os.path.join(directory, baseName + "_thumb_normalized"))
 
     nuclei_p = pd.DataFrame()
     nuclei_p['cx'] = nuclei['cx']
@@ -72,7 +72,7 @@ def process_sample(directory, sample):
     nuclei_p['ang_max_Venus'] = np.NaN
     nuclei_p.reset_index()
 
-    thumbnail(nuclei_p, None)
+    thumbnail(nuclei_p, None, os.path.join(directory, baseName + "_thumb_aligned"))
 
     KDtree = spa.cKDTree(nuclei_p[['cx', 'cy', 'cz']].values)
 
@@ -92,7 +92,7 @@ def process_sample(directory, sample):
         if len(max_venus_neighbor.index) == 1:
             nuclei_p.at[index, 'ang_max_Venus'] = nuclei_angle(nucleus, max_venus_neighbor)
 
-    #nuclei_p.to_csv(os.path.join(directory, baseName + "_normalized.csv"))
+    nuclei_p.to_csv(os.path.join(directory, baseName + "_normalized.csv"))
     return nuclei_p
 
 
