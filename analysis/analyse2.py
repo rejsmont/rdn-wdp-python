@@ -232,15 +232,15 @@ def detect_ridges(gray, sigma=3.0):
     return i1, i2
 
 
-def rms_fit(cx, cy):
+def rms_fit(cx, cy, deg=10, err_mean=0.5, err_max=2.0):
 
-    for degree in range(0, 10):
+    for degree in range(0, deg):
         fn = np.polyfit(cx, cy, degree)
         fy = np.polyval(fn, cx)
         error_mean = ((cy - fy) ** 2).mean()
         error_max = ((cy - fy) ** 2).max()
 
-        if error_mean < 0.25 and error_max < 1:
+        if error_mean < err_mean and error_max < err_max:
             return fn
 
     return fn
