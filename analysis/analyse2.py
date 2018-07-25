@@ -413,29 +413,29 @@ def nuclei_angle(n1, n2):
         return angle_between(v1, v2)
 
 
-# Input dir #
-inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
-sample = "63951_disc_5_CJH0WG"
-process_sample(inputDir, sample + '.csv')
-
-
 # # Input dir #
-# inputDir = sys.argv[1]
-# workers = int(sys.argv[2])
-# print("Processing " + inputDir + " with " + str(workers) + " workers.")
-#
-#
-# def process_dir_sample(sample):
-#     try:
-#         process_sample(inputDir, sample)
-#     except:
-#         print("   [Error] - processing sample " + sample + " failed.")
-#     return True
-#
-#
-# samples = [f for f in os.listdir(inputDir) if
-#            os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
-#
-# if __name__ == '__main__':
-#     with Pool(workers) as p:
-#         p.map(process_dir_sample, samples)
+# inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
+# sample = "63951_disc_5_CJH0WG"
+# process_sample(inputDir, sample + '.csv')
+
+
+# Input dir #
+inputDir = sys.argv[1]
+workers = int(sys.argv[2])
+print("Processing " + inputDir + " with " + str(workers) + " workers.")
+
+
+def process_dir_sample(sample):
+    try:
+        process_sample(inputDir, sample)
+    except:
+        print("   [Error] - processing sample " + sample + " failed.")
+    return True
+
+
+samples = [f for f in os.listdir(inputDir) if
+           os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
+
+if __name__ == '__main__':
+    with Pool(workers) as p:
+        p.map(process_dir_sample, samples)
