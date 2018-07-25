@@ -49,9 +49,12 @@ def process_sample(directory, sample):
     nuclei['DAPI'] = nuclei['Mean 0']
 
     print("    - computing furrow position")
-    furrow = find_furrow(nuclei)
+    furrow, hessian, thresholded, labels = find_furrow(nuclei)
     print("    - generating raw thumbnail")
     thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumb_raw"))
+    thumbnail(hessian, None, os.path.join(directory, baseName + "_thumb_hessian"))
+    thumbnail(thresholded, None, os.path.join(directory, baseName + "_thumb_thresholded"))
+    thumbnail(labels, None, os.path.join(directory, baseName + "_thumb_labels"))
 
     unitI = nuclei.loc[round(nuclei['cy']) == round(round(nuclei['cx']).map(furrow)), 'Mean 1'].mean()
     nuclei['mCherry'] = nuclei['Mean 1'] / unitI
@@ -248,20 +251,23 @@ def rms_fit(cx, cy, deg=10, err_mean=0.5, err_max=2.0):
     return fn
 
 
-def find_furrow(disc):
+def find_furrow(disc, use_dapi=False):
 
     furrow_disc = pd.DataFrame()
     furrow_disc['cx'] = disc['cx']
     furrow_disc['cy'] = disc['cy']
     furrow_disc['cz'] = disc['cz']
     furrow_disc['mCherry'] = disc['mCherry']
-    furrow_disc['DAPI'] = 1 / disc['DAPI']
-    dapi_m = channel_matrix(furrow_disc, 'DAPI', 'mean')
     cherry_m = channel_matrix(furrow_disc, 'mCherry', 'mean')
-
-    dhe_min, dhe_max = detect_ridges(dapi_m)
     xhe_min, che_max = detect_ridges(cherry_m)
-    he_max = dhe_max * che_max
+
+    if use_dapi:
+        furrow_disc['DAPI'] = 1 / disc['DAPI']
+        dapi_m = channel_matrix(furrow_disc, 'DAPI', 'mean')
+        dhe_min, dhe_max = detect_ridges(dapi_m)
+        he_max = dhe_max * che_max
+    else:
+        he_max = che_max
 
     threshold = threshold_triangle(he_max)
     thresholded = he_max > threshold
@@ -322,7 +328,7 @@ def find_furrow(disc):
 
     fn = rms_fit(cx, cy)
 
-    return np.poly1d(fn)
+    return (np.poly1d(fn), he_max, thresholded, labels)
 
 
 def thumbnail(disc, f=None, basename=""):
