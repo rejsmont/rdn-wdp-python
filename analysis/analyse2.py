@@ -234,7 +234,7 @@ def detect_ridges(gray, sigma=3.0):
 
 def rms_fit(cx, cy):
 
-    for degree in range(0, 20):
+    for degree in range(0, 10):
         fn = np.polyfit(cx, cy, degree)
         fy = np.polyval(fn, cx)
         error_mean = ((cy - fy) ** 2).mean()
@@ -242,6 +242,8 @@ def rms_fit(cx, cy):
 
         if error_mean < 0.25 and error_max < 1:
             return fn
+
+    return fn
 
 
 def find_furrow(disc):
@@ -312,6 +314,10 @@ def find_furrow(disc):
     indices = np.arange(0, len(positions))
     cx = indices[mask]
     cy = positions[mask]
+
+    if len(cx) < 2:
+        print("   [Warning] - unable to determine furrow position.")
+
     fn = rms_fit(cx, cy)
 
     return np.poly1d(fn)
@@ -385,7 +391,7 @@ def nuclei_angle(n1, n2):
 
 # # Input dir #
 # inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
-# sample = "58577_disc_1_IU43O6"
+# sample = "63951_disc_5_CJH0WG"
 # process_sample(inputDir, sample + '.csv')
 
 
