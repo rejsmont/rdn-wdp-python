@@ -52,9 +52,9 @@ def process_sample(directory, sample):
     furrow, hessian, thresholded, labels = find_furrow(nuclei)
     print("    - generating raw thumbnail")
     thumbnail(nuclei, None, os.path.join(directory, baseName + "_thumb_raw"))
-    thumbnail(hessian, None, os.path.join(directory, baseName + "_thumb_hessian"))
-    thumbnail(thresholded, None, os.path.join(directory, baseName + "_thumb_thresholded"))
-    thumbnail(labels, None, os.path.join(directory, baseName + "_thumb_labels"))
+    save_image(hessian, os.path.join(directory, baseName + "_thumb_hessian"))
+    save_image(thresholded, os.path.join(directory, baseName + "_thumb_thresholded"))
+    save_image(labels, os.path.join(directory, baseName + "_thumb_labels"))
 
     unitI = nuclei.loc[round(nuclei['cy']) == round(round(nuclei['cx']).map(furrow)), 'Mean 1'].mean()
     nuclei['mCherry'] = nuclei['Mean 1'] / unitI
@@ -328,7 +328,7 @@ def find_furrow(disc, use_dapi=False):
 
     fn = rms_fit(cx, cy)
 
-    return (np.poly1d(fn), he_max, thresholded, labels)
+    return np.poly1d(fn), he_max, thresholded, labels
 
 
 def thumbnail(disc, f=None, basename=""):
@@ -374,6 +374,22 @@ def thumbnail(disc, f=None, basename=""):
     plt.close()
 
 
+def save_image(image, basename=""):
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title('colorMap')
+    plt.imshow(image)
+    ax.set_aspect('equal')
+
+    if basename:
+        plt.savefig(basename + ".png")
+    else:
+        plt.show()
+
+    plt.close()
+
+
 def unit_vector(vector):
     """ Returns the unit vector of the vector. """
     return vector / np.linalg.norm(vector)
@@ -397,29 +413,29 @@ def nuclei_angle(n1, n2):
         return angle_between(v1, v2)
 
 
-# # Input dir #
-# inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
-# sample = "63951_disc_5_CJH0WG"
-# process_sample(inputDir, sample + '.csv')
-
-
 # Input dir #
-inputDir = sys.argv[1]
-workers = int(sys.argv[2])
-print("Processing " + inputDir + " with " + str(workers) + " workers.")
+inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
+sample = "63951_disc_5_CJH0WG"
+process_sample(inputDir, sample + '.csv')
 
 
-def process_dir_sample(sample):
-    try:
-        process_sample(inputDir, sample)
-    except:
-        print("   [Error] - processing sample " + sample + " failed.")
-    return True
-
-
-samples = [f for f in os.listdir(inputDir) if
-           os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
-
-if __name__ == '__main__':
-    with Pool(workers) as p:
-        p.map(process_dir_sample, samples)
+# # Input dir #
+# inputDir = sys.argv[1]
+# workers = int(sys.argv[2])
+# print("Processing " + inputDir + " with " + str(workers) + " workers.")
+#
+#
+# def process_dir_sample(sample):
+#     try:
+#         process_sample(inputDir, sample)
+#     except:
+#         print("   [Error] - processing sample " + sample + " failed.")
+#     return True
+#
+#
+# samples = [f for f in os.listdir(inputDir) if
+#            os.path.isfile(os.path.join(inputDir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
+#
+# if __name__ == '__main__':
+#     with Pool(workers) as p:
+#         p.map(process_dir_sample, samples)
