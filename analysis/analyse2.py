@@ -490,9 +490,9 @@ else:
 
     samples = [f for f in os.listdir(args.dir) if
                os.path.isfile(os.path.join(args.dir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
-    processes = [SampleProcessor(args.dir, sample, options) for sample in samples]
 
-    def run_process(proc):
+    def run_process(sample):
+        proc = SampleProcessor(args.dir, sample, options)
         try:
             proc.run()
         except:
@@ -500,7 +500,7 @@ else:
 
     if __name__ == '__main__':
         with Pool(args.workers) as p:
-            p.map(run_process, processes)
+            p.map(run_process, samples)
 
 # # Input dir #
 # inputDir = "/Users/radoslaw.ejsmont/Desktop/rdn-wdp/samples-csv"
