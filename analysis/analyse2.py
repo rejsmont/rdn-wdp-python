@@ -226,11 +226,12 @@ class SampleProcessor:
                 positions = lines[i][2]
                 top_distance = (top_edge - positions)
                 bottom_distance = (positions - bottom_edge)
+                middle_line = bottom_edge + (top_edge - bottom_edge) / 2
                 total_count = positions[~np.isnan(positions)].size
                 with np.errstate(invalid='ignore'):
                     top_count = top_distance[~np.isnan(top_distance) & (top_distance < 2)].size
                     bottom_count = bottom_distance[~np.isnan(bottom_distance) & (bottom_distance < 2)].size
-                    half_count = positions[positions > (top_distance/2)].size
+                    half_count = positions[positions > middle_line].size
                 if bottom_count/total_count > 0.5 or top_count/total_count > 0.25 or half_count/total_count > 0.5:
                     lines[i] = None
                     continue
@@ -262,6 +263,10 @@ class SampleProcessor:
         indices = np.arange(0, positions.size)
         cx = indices[mask]
         cy = positions[mask]
+        furrow_img = np.zeros(cherry_m.shape, dtype=bool)
+        for i, x in enumerate(cx):
+            furrow_img[int(cy[i]), x] = True
+        self.thumbnail('furrow_line', furrow_img, title="Furrow line")
         if len(cx) < 2:
             self.logger.warning("Unable to reliably determine furrow position")
         fn = self.rms_fit(cx, cy)
