@@ -114,9 +114,9 @@ class SampleProcessor:
         data['int'] = disc[field]
         # Compute bounds
         x_min = int(data['ux'].min())
-        x_max = int(data['ux'].max())
+        x_max = int(data['ux'].max()) + 1
         y_min = int(data['uy'].min())
-        y_max = int(data['uy'].max())
+        y_max = int(data['uy'].max()) + 1
         # Initialize empty array
         matrix = np.zeros([x_max, y_max])
         # Compute matrix values
@@ -264,17 +264,20 @@ class SampleProcessor:
         cx = indices[mask]
         cy = positions[mask]
         furrow_img = np.zeros(cherry_m.shape, dtype=bool)
-        for i, x in enumerate(cx):
-            furrow_img[int(cy[i]), x] = True
-        self.thumbnail('furrow_line', furrow_img, title="Furrow line")
         if len(cx) < 2:
             self.logger.warning("Unable to reliably determine furrow position")
         fn = self.rms_fit(cx, cy)
-        self.furrow = np.poly1d(fn)
+        poly = np.poly1d(fn)
+        for x in range(0, positions.size):
+            if np.isnan(positions[x]):
+                positions[x] = round(poly(x))
+            furrow_img[int(positions[x]), x] = True
+        self.thumbnail('furrow_line', furrow_img, title="Furrow line")
+        self.furrow = positions
 
     def normalize_intensities(self):
         d_cy = round(self.nuclei['cy'])
-        f_cy = round(round(self.nuclei['cx']).map(self.furrow))
+        f_cy = self.furrow[round(self.nuclei['cx']).astype('int')]
         unit = self.nuclei.loc[d_cy == f_cy, 'mCherry'].mean()
         self.logger.debug("Normalization factor: %f", unit)
         self.nuclei['mCherry'] = self.nuclei['mCherry'] / unit
@@ -284,7 +287,7 @@ class SampleProcessor:
 
     def align_nuclei(self):
         self.nuclei_p['cx'] = self.nuclei['cx']
-        self.nuclei_p['cy'] = self.nuclei['cy'] - round(round(self.nuclei['cx']).map(self.furrow))
+        self.nuclei_p['cy'] = self.nuclei['cy'] - self.furrow[round(self.nuclei['cx']).astype('int')]
         self.nuclei_p['cz'] = self.nuclei['cz']
         self.nuclei_p['mCherry'] = self.nuclei['mCherry']
         self.nuclei_p['Venus'] = self.nuclei['Venus']
@@ -391,7 +394,7 @@ class SampleProcessor:
         plt.imshow(thumbnail.image)
         if thumbnail.fn is not None:
             x = np.arange(0, thumbnail.image.shape[1])
-            plt.plot(x, thumbnail.fn(x))
+            plt.plot(x, thumbnail.fn)
         ax.set_aspect('equal')
 
     def plot_thumbnails(self, fig):
@@ -448,7 +451,7 @@ class SampleProcessor:
                        self.disc_matrix(self.nuclei_p, 'mCherry'),
                        self.disc_matrix(self.nuclei_p, 'DAPI'),
                        self.disc_matrix(self.nuclei_p, 'Venus'),
-                       np.poly1d([0, -(self.nuclei_p['cy'].min())]),
+                       np.full(self.furrow.shape, -(self.nuclei_p['cy'].min())),
                        title="Normalized disc image")
         self.logger.info("Computing neighbors")
         self.compute_neighbors()
