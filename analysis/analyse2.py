@@ -12,6 +12,7 @@ import scipy.spatial as spa
 import matplotlib
 from PIL import Image
 from multiprocessing import cpu_count, Pool, Process
+from skimage.color import label2rgb
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from skimage.filters import threshold_triangle
 from skimage.morphology import skeletonize
@@ -155,7 +156,10 @@ class SampleProcessor:
         return np.transpose(smooth)
 
     def display_normalize(self, data):
-        return ((data / (data.mean() * 2)) * 255).clip(0, 255).astype('uint8')
+        if data.max() == 1:
+            return (data * 255).clip(0, 255).astype('uint8')
+        else:
+            return ((data / (data.mean() * 2)) * 255).clip(0, 255).astype('uint8')
 
     def detect_ridges(self, image, sigma=3.0):
         pad = round(sigma * 3)
@@ -209,11 +213,11 @@ class SampleProcessor:
         self.thumbnail('thresholded', thresholded, title="Thresholded MHE (triangle)")
         skeleton = skeletonize(thresholded)
         labels = label(skeleton)
-        self.thumbnail('labels', labels, title="Detected lines")
+        self.thumbnail('labels', label2rgb(labels, bg_label=0), title="Detected lines")
         lines = []
         for line in range(1, labels.max() + 1):
             image = (labels == line)
-            lines.append((line, image[image is True].size, image.argmax(axis=0).astype('float')))
+            lines.append((line, image[image==True].size, image.argmax(axis=0).astype('float')))
         lines = sorted(lines, key=lambda l: l[1], reverse=True)
         for line in lines:
             line_label = line[0]
@@ -233,6 +237,12 @@ class SampleProcessor:
                     bottom_count = bottom_distance[~np.isnan(bottom_distance) & (bottom_distance < 2)].size
                     half_count = positions[positions > middle_line].size
                 if bottom_count/total_count > 0.5 or top_count/total_count > 0.25 or half_count/total_count > 0.5:
+                    # if bottom_count/total_count > 0.5:
+                    #     self.logger.debug("Bottom count violated for line %i", i)
+                    # if top_count/total_count > 0.25:
+                    #     self.logger.debug("Top count violated for line %i", i)
+                    # if half_count/total_count > 0.5:
+                    #     self.logger.debug("Half count violated for line %i", i)
                     lines[i] = None
                     continue
                 for j in range(i + 1, len(lines)):
@@ -240,6 +250,8 @@ class SampleProcessor:
                         collisions = 0
                         positions_i = lines[i][2]
                         positions_j = lines[j][2]
+                        if positions_j.size < 5:
+                            lines[j] = None
                         for k in range(0, len(positions_i)):
                             if positions_i[k] >= 0 and positions_j[k] >= 0:
                                 collisions = collisions + 1
@@ -323,6 +335,9 @@ class SampleProcessor:
                 self.display_normalize(red),
                 self.display_normalize(green),
                 self.display_normalize(blue)), axis=2)
+            mode = 'RGB'
+        elif len(red.shape) == 3:
+            image = self.display_normalize(red)
             mode = 'RGB'
         else:
             image = self.display_normalize(red)
