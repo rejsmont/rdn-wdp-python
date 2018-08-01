@@ -35,7 +35,8 @@ class SampleProcessor:
         self.directory = directory
         self.sample = sample
         self.basename = os.path.splitext(self.sample)[0]
-        self.hash = self.basename.split("_")[3]
+        split = self.basename.split("_")
+        self.hash = split[len(split)-1]
         self.logger = logging.getLogger(self.hash)
         self.nuclei = pd.DataFrame()
         self.images = collections.OrderedDict()
