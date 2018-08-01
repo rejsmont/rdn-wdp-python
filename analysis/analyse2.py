@@ -295,7 +295,7 @@ class SampleProcessor:
         self.nuclei['mCherry'] = self.nuclei['mCherry'] / unit
         self.nuclei['Venus'] = self.nuclei['Venus'] / unit
         self.nuclei['DAPI'] = self.nuclei['DAPI'] / unit
-        self.nuclei.loc[d_cy > f_cy + 10, 'mCherry'] = self.nuclei['mCherry'].min()
+        #self.nuclei.loc[d_cy > f_cy + 10, 'mCherry'] = self.nuclei['mCherry'].min()
 
     def align_nuclei(self):
         self.nuclei_p['cx'] = self.nuclei['cx']
