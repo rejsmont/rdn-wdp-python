@@ -76,7 +76,7 @@ class SampleProcessor:
         btm_right = self.nuclei.loc[(round_cy > max_y) & (round_cx > max_x), 'DAPI'].count()
         return [top_left, top_right, btm_left, btm_right]
 
-    def fix_rotation(self, radius=5):
+    def fix_rotation(self, radius=15):
         zeroes = 4
         i = 1
         while zeroes > 1 and i <= radius:
