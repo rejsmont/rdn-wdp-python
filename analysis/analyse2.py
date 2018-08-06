@@ -31,7 +31,7 @@ class SampleProcessor:
     class Options:
         show_thumbs = 'immediately'
 
-    def __init__(self, directory, sample, options=None):
+    def __init__(self, directory, sample, options=None, furrow=None):
         self.directory = directory
         self.sample = sample
         self.basename = os.path.splitext(self.sample)[0]
@@ -45,6 +45,7 @@ class SampleProcessor:
         else:
             self.options = SampleProcessor.Options()
         self.furrow = np.poly1d([0, 0])
+        self.furrow_manual = furrow
         self.nuclei_p = pd.DataFrame()
 
     def read_nuclei(self):
@@ -184,41 +185,13 @@ class SampleProcessor:
         self.logger.warning("Unable to find good polynomial fit")
         return fn
 
-    def find_furrow(self, use_dapi=False):
-        disc = pd.DataFrame()
-        disc['cx'] = self.nuclei['cx']
-        disc['cy'] = self.nuclei['cy']
-        disc['cz'] = self.nuclei['cz']
-        disc['mCherry'] = self.nuclei['mCherry']
-        cherry_m = self.disc_matrix(disc, 'mCherry', 'mean')
-        disc['DAPI'] = self.nuclei['DAPI']
-        dapi_m = self.disc_matrix(disc, 'DAPI', 'mean')
-        mask_thr = threshold_triangle(dapi_m)
-        mask = dapi_m > mask_thr
-        self.thumbnail('mask', mask, title="Disc mask")
-
+    def auto_furrow(self, labels, mask):
         top_edge = mask.shape[0] - np.argmax(np.flip(mask, axis=0), axis=0) - 1
         bottom_edge = np.argmax(mask, axis=0)
-
-        xhe_min, che_max = self.detect_ridges(cherry_m)
-        if use_dapi:
-            disc['iDAPI'] = 1 / self.nuclei['DAPI']
-            idapi_m = self.disc_matrix(disc, 'iDAPI', 'mean')
-            dhe_min, dhe_max = self.detect_ridges(idapi_m)
-            he_max = dhe_max * che_max
-        else:
-            he_max = np.absolute(che_max)
-        self.thumbnail('hessian', he_max, title="Max of Hessian Eigenvalue (MHE)")
-        threshold = threshold_triangle(he_max)
-        thresholded = he_max > threshold
-        self.thumbnail('thresholded', thresholded, title="Thresholded MHE (triangle)")
-        skeleton = skeletonize(thresholded)
-        labels = label(skeleton)
-        self.thumbnail('labels', label2rgb(labels, bg_label=0), title="Detected lines")
         lines = []
         for line in range(1, labels.max() + 1):
             image = (labels == line)
-            lines.append((line, image[image==True].size, image.argmax(axis=0).astype('float')))
+            lines.append((line, image[image == True].size, image.argmax(axis=0).astype('float')))
         lines = sorted(lines, key=lambda l: l[1], reverse=True)
         for line in lines:
             line_label = line[0]
@@ -237,13 +210,7 @@ class SampleProcessor:
                     top_count = top_distance[~np.isnan(top_distance) & (top_distance < 2)].size
                     bottom_count = bottom_distance[~np.isnan(bottom_distance) & (bottom_distance < 2)].size
                     half_count = positions[positions > middle_line].size
-                if bottom_count/total_count > 0.5 or top_count/total_count > 0.25 or half_count/total_count > 0.5:
-                    # if bottom_count/total_count > 0.5:
-                    #     self.logger.debug("Bottom count violated for line %i", i)
-                    # if top_count/total_count > 0.25:
-                    #     self.logger.debug("Top count violated for line %i", i)
-                    # if half_count/total_count > 0.5:
-                    #     self.logger.debug("Half count violated for line %i", i)
+                if bottom_count / total_count > 0.5 or top_count / total_count > 0.25 or half_count / total_count > 0.5:
                     lines[i] = None
                     continue
                 for j in range(i + 1, len(lines)):
@@ -272,21 +239,62 @@ class SampleProcessor:
                             if not np.isnan(lines[j][2][i]):
                                 positions[i] = lines[j][2][i]
                                 break
-        mask = ~np.isnan(positions)
-        indices = np.arange(0, positions.size)
+        return positions
+
+    def manual_furrow(self):
+        image = Image.open(self.furrow_manual)
+        if image:
+            data = np.array(image)
+            return data.argmax(axis=0).astype('float')
+        else:
+            return None
+
+    def find_furrow(self, use_dapi=False):
+        disc = pd.DataFrame()
+        disc['cx'] = self.nuclei['cx']
+        disc['cy'] = self.nuclei['cy']
+        disc['cz'] = self.nuclei['cz']
+        disc['mCherry'] = self.nuclei['mCherry']
+        cherry_m = self.disc_matrix(disc, 'mCherry', 'mean')
+        disc['DAPI'] = self.nuclei['DAPI']
+        dapi_m = self.disc_matrix(disc, 'DAPI', 'mean')
+        mask_thr = threshold_triangle(dapi_m)
+        mask = dapi_m > mask_thr
+        self.thumbnail('mask', mask, title="Disc mask")
+        xhe_min, che_max = self.detect_ridges(cherry_m)
+        if use_dapi:
+            disc['iDAPI'] = 1 / self.nuclei['DAPI']
+            idapi_m = self.disc_matrix(disc, 'iDAPI', 'mean')
+            dhe_min, dhe_max = self.detect_ridges(idapi_m)
+            he_max = dhe_max * che_max
+        else:
+            he_max = np.absolute(che_max)
+        self.thumbnail('hessian', he_max, title="Max of Hessian Eigenvalue (MHE)")
+        threshold = threshold_triangle(he_max)
+        thresholded = he_max > threshold
+        self.thumbnail('thresholded', thresholded, title="Thresholded MHE (triangle)")
+        skeleton = skeletonize(thresholded)
+        labels = label(skeleton)
+        self.thumbnail('labels', label2rgb(labels, bg_label=0), title="Detected lines")
+        if self.furrow_manual:
+            furrow = self.manual_furrow()
+        else:
+            furrow = self.auto_furrow(labels, mask)
+        mask = ~np.isnan(furrow)
+        indices = np.arange(0, furrow.size)
         cx = indices[mask]
-        cy = positions[mask]
+        cy = furrow[mask]
         furrow_img = np.zeros(cherry_m.shape, dtype=bool)
         if len(cx) < 2:
             self.logger.warning("Unable to reliably determine furrow position")
         fn = self.rms_fit(cx, cy)
         poly = np.poly1d(fn)
-        for x in range(0, positions.size):
-            if np.isnan(positions[x]):
-                positions[x] = round(poly(x))
-            furrow_img[int(positions[x]), x] = True
+        for x in range(0, furrow.size):
+            if np.isnan(furrow[x]):
+                furrow[x] = round(poly(x))
+            furrow_img[int(furrow[x]), x] = True
         self.thumbnail('furrow_line', furrow_img, title="Furrow line")
-        self.furrow = positions
+        self.furrow = furrow
 
     def normalize_intensities(self):
         d_cy = round(self.nuclei['cy'])
@@ -296,7 +304,6 @@ class SampleProcessor:
         self.nuclei['mCherry'] = self.nuclei['mCherry'] / unit
         self.nuclei['Venus'] = self.nuclei['Venus'] / unit
         self.nuclei['DAPI'] = self.nuclei['DAPI'] / unit
-        #self.nuclei.loc[d_cy > f_cy + 10, 'mCherry'] = self.nuclei['mCherry'].min()
 
     def align_nuclei(self):
         self.nuclei_p['cx'] = self.nuclei['cx']
@@ -486,6 +493,7 @@ class SampleProcessor:
 parser = argparse.ArgumentParser(description='Nuclear point cloud postprocessing.')
 parser.add_argument('--dir', required=True)
 parser.add_argument('--csv')
+parser.add_argument('--furrow')
 parser.add_argument('--workers', type=int, default=cpu_count())
 parser.add_argument('--log')
 parser.add_argument('--headless', action='store_true')
@@ -506,7 +514,7 @@ if args.headless:
     options.show_thumbs = 'never'
 if args.csv:
     logging.info("Single sample processing")
-    process = SampleProcessor(args.dir, args.csv, options)
+    process = SampleProcessor(args.dir, args.csv, options, furrow=args.furrow)
     process.run()
 else:
     logger = logging.getLogger('analyse')
