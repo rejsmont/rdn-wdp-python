@@ -31,7 +31,7 @@ class SampleProcessor:
     class Options:
         show_thumbs = 'immediately'
 
-    def __init__(self, directory, sample, options=None, furrow=None):
+    def __init__(self, directory, sample, options=None, furrow=None, flip=None):
         self.directory = directory
         self.sample = sample
         self.basename = os.path.splitext(self.sample)[0]
@@ -46,6 +46,7 @@ class SampleProcessor:
             self.options = SampleProcessor.Options()
         self.furrow = np.poly1d([0, 0])
         self.furrow_manual = furrow
+        self.flip = flip
         self.nuclei_p = pd.DataFrame()
 
     def read_nuclei(self):
@@ -78,24 +79,27 @@ class SampleProcessor:
         return [top_left, top_right, btm_left, btm_right]
 
     def fix_rotation(self, radius=15):
-        zeroes = 4
-        i = 1
-        while zeroes > 1 and i <= radius:
-            corners = self.count_corners(i)
-            zeroes = sum(c == 0 for c in corners)
-            i = i + 1
-        if zeroes == 0:
-            self.logger.warning("Unable to detect origin: nuclei occupy the whole field of view")
-            origin = 2
-        elif zeroes > 1:
-            self.logger.warning("Unable to detect origin: more than one corner is empty")
-            origin = 2
+        if self.flip == 'auto' or self.flip is None:
+            zeroes = 4
+            i = 1
+            while zeroes > 1 and i <= radius:
+                corners = self.count_corners(i)
+                zeroes = sum(c == 0 for c in corners)
+                i = i + 1
+            if zeroes == 0:
+                self.logger.warning("Unable to detect origin: nuclei occupy the whole field of view")
+                origin = 2
+            elif zeroes > 1:
+                self.logger.warning("Unable to detect origin: more than one corner is empty")
+                origin = 2
+            else:
+                origin = corners.index(min(corners))
         else:
-            origin = corners.index(min(corners))
-        if origin < 2:
+            origin = 2
+        if origin < 2 or 'y' in self.flip:
             self.logger.debug("Flipping disc vertically")
             self.nuclei['cy'] = self.nuclei['cy'].max() - self.nuclei['cy']
-        if origin % 2 != 0:
+        if origin % 2 != 0 or 'x' in self.flip:
             self.logger.debug("Flipping disc horizontally")
             self.nuclei['cx'] = self.nuclei['cx'].max() - self.nuclei['cx']
 
@@ -494,6 +498,9 @@ parser = argparse.ArgumentParser(description='Nuclear point cloud postprocessing
 parser.add_argument('--dir', required=True)
 parser.add_argument('--csv')
 parser.add_argument('--furrow')
+parser.add_argument('--no-flip')
+parser.add_argument('--flip-x')
+parser.add_argument('--flip-y')
 parser.add_argument('--workers', type=int, default=cpu_count())
 parser.add_argument('--log')
 parser.add_argument('--headless', action='store_true')
@@ -514,7 +521,18 @@ if args.headless:
     options.show_thumbs = 'never'
 if args.csv:
     logging.info("Single sample processing")
-    process = SampleProcessor(args.dir, args.csv, options, furrow=args.furrow)
+    flip='auto'
+    if args.no_flip:
+        flip='none'
+    if args.flip_x:
+        flip='x'
+    if args.flip_y:
+        if flip == 'x':
+            flip = 'xy'
+        else:
+            flip = 'y'
+    print(flip)
+    process = SampleProcessor(args.dir, args.csv, options, furrow=args.furrow, flip=flip)
     process.run()
 else:
     logger = logging.getLogger('analyse')
