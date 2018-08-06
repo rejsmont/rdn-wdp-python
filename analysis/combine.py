@@ -46,5 +46,5 @@ for sample in samples:
         logging.info("Skipping %s", sample_id)
         skipped = skipped + 1
     data = pd.concat(datasets)
-    if args.out:
-        data.to_csv(args.out)
+if args.out:
+    data.to_csv(args.out)
