@@ -154,8 +154,8 @@ def plot_data(data, sample=None):
 
     image = np.stack((
         display_normalize(cherry, vmin, vmax, log=False),
-        display_normalize(venus, vmin, vmax, log=True),
-        display_normalize(np.zeros(venus.shape), vmin, vmax, log=True)), axis=2)
+        display_normalize(venus, vmin, vmax, log=False),
+        display_normalize(np.zeros(venus.shape), vmin, vmax, log=False)), axis=2)
     fig = plt.figure()
     ax = fig.add_subplot(111)
     div = make_axes_locatable(ax)
@@ -171,24 +171,12 @@ def plot_data(data, sample=None):
     cdict = {'red':   ((0.0, 0.0, 0.0),
                        (1.0, 1.0, 1.0)),
              'green': ((0.0, 0.0, 0.0),
-                       (1.0, 0.0, 0.0)),
-             'blue':  ((0.0, 0.0, 0.0),
-                       (1.0, 0.0, 0.0))}
-    cmap = colors.LinearSegmentedColormap('red', cdict)
-    img = ax.imshow(image, extent=[xmin, xmax, ymax, ymin], norm=norm, cmap=cmap)
-    cax = div.append_axes("right", size=0.3, pad=0.1)
-    plt.colorbar(img, cax=cax)
-
-    norm = colors.LogNorm(vmin=vmin, vmax=vmax)
-    cdict = {'red': ((0.0, 0.0, 0.0),
-                     (1.0, 0.0, 0.0)),
-             'green': ((0.0, 0.0, 0.0),
                        (1.0, 1.0, 1.0)),
-             'blue': ((0.0, 0.0, 0.0),
-                      (1.0, 0.0, 0.0))}
-    cmap = colors.LinearSegmentedColormap('green', cdict)
+             'blue':  ((0.0, 0.0, 0.0),
+                       (1.0, 1.0, 1.0))}
+    cmap = colors.LinearSegmentedColormap('grays', cdict)
     img = ax.imshow(image, extent=[xmin, xmax, ymax, ymin], norm=norm, cmap=cmap)
-    cax = div.append_axes("right", size=0.3, pad=0.4)
+    cax = div.append_axes("right", size=0.3, pad=0.05)
     plt.colorbar(img, cax=cax)
 
     ax.set_aspect('equal')
