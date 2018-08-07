@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 import math
 import matplotlib.pyplot as plt
+from matplotlib import colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from multiprocessing import cpu_count, Pool
 
 
 def disc_matrix(disc, field, method='max'):
@@ -68,21 +71,30 @@ def disc_matrix(disc, field, method='max'):
     return np.transpose(smooth)
 
 
-def display_normalize(data, min=None, max=None):
-    if min is None:
-        min = 0
-    if max is None:
-        max = (data.mean() * 2)
+def display_normalize(data, vmin=None, vmax=None, log=False):
+    if log:
+        data = np.log10(data)
+        vmin = math.log10(vmin)
+        vmax = math.log10(vmax)
+    if vmin is None:
+        vmin = 0
+    if vmax is None:
+        vmax = (data.mean() * 2)
     if data.max() == 1:
         return (data * 255).clip(0, 255).astype('uint8')
     else:
-        return (((data-min) / (max-min)) * 255).clip(0, 255).astype('uint8')
+        return (((data-vmin) / (vmax-vmin)) * 255).clip(0, 255).astype('uint8')
 
 
 parser = argparse.ArgumentParser(description='Plot all data.')
 parser.add_argument('--data', required=True)
 parser.add_argument('--target')
+parser.add_argument('--targets', action='store_true')
+parser.add_argument('--sample')
+parser.add_argument('--samples', action='store_true')
+parser.add_argument('--log-scale', action='store_true')
 parser.add_argument('--log')
+parser.add_argument('--dir')
 args = parser.parse_args()
 
 if args.log:
@@ -93,16 +105,14 @@ if args.log:
 input = pd.read_csv(args.data)
 input.loc[input['cy'] > 9, 'mCherry'] = input['mCherry'].min()
 
-targets = input['Gene'].unique()
-
-print(targets)
-
-gxmin = round(input['cx'].min())
-#gxmax = round(input['cx'].max())
+gxmin = 0
 gxmax = 80
-#gymin = round(input['cy'].min())
 gymin = -10
-gymax = round(input['cy'].max())
+gymax = 45
+# gxmin = round(input['cx'].min())
+# gxmax = round(input['cx'].max())
+# gymin = round(input['cy'].min())
+# gymax = round(input['cy'].max())
 
 cherry_min = input['mCherry'].min()
 cherry_max = input['mCherry'].mean() * 5
@@ -113,14 +123,29 @@ dapi_max = input['DAPI'].mean() * 2
 venus_min = input['Venus'].min()
 venus_max = input['Venus'].mean()
 
+vmin = 0.01
+vmax = 1.5
 
-def plot_target(input, target):
+log = args.log_scale
 
+
+def plot_sample(sample):
+    print(sample)
+    data = input[input['Sample'] == sample]
+    plot_data(data, sample)
+
+
+def plot_target(target):
+    print(target)
     data = input[input['Gene'] == target]
+    plot_data(data)
 
+
+def plot_data(data, sample=None):
+    target = data['Gene'].unique()[0]
     cherry = disc_matrix(data, 'mCherry', method='mean')
-    dapi = disc_matrix(data, 'DAPI', method='mean')
     venus = disc_matrix(data, 'Venus', method='mean')
+    # dapi = disc_matrix(data, 'DAPI', method='mean')
 
     xmin = round(data['cx'].min())
     xmax = round(data['cx'].max())
@@ -128,24 +153,73 @@ def plot_target(input, target):
     ymax = round(data['cy'].max())
 
     image = np.stack((
-        display_normalize(cherry, cherry_min, cherry_max),
-        display_normalize(venus, venus_min, venus_max),
-        np.zeros(venus.shape).astype('uint8')), axis=2)
+        display_normalize(cherry, vmin, vmax, log=False),
+        display_normalize(venus, vmin, vmax, log=True),
+        display_normalize(np.zeros(venus.shape), vmin, vmax, log=True)), axis=2)
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.set_title(target + ' expression')
-    plt.imshow(image, extent=[xmin, xmax, ymax, ymin])
+    div = make_axes_locatable(ax)
+
+    if sample:
+        ax.set_title(target + ' expression (' + sample + ')')
+        filename = target + '_' + sample + '.png'
+    else:
+        ax.set_title(target + ' expression')
+        filename = target + '.png'
+
+    norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    cdict = {'red':   ((0.0, 0.0, 0.0),
+                       (1.0, 1.0, 1.0)),
+             'green': ((0.0, 0.0, 0.0),
+                       (1.0, 0.0, 0.0)),
+             'blue':  ((0.0, 0.0, 0.0),
+                       (1.0, 0.0, 0.0))}
+    cmap = colors.LinearSegmentedColormap('red', cdict)
+    img = ax.imshow(image, extent=[xmin, xmax, ymax, ymin], norm=norm, cmap=cmap)
+    cax = div.append_axes("right", size=0.3, pad=0.1)
+    plt.colorbar(img, cax=cax)
+
+    norm = colors.LogNorm(vmin=vmin, vmax=vmax)
+    cdict = {'red': ((0.0, 0.0, 0.0),
+                     (1.0, 0.0, 0.0)),
+             'green': ((0.0, 0.0, 0.0),
+                       (1.0, 1.0, 1.0)),
+             'blue': ((0.0, 0.0, 0.0),
+                      (1.0, 0.0, 0.0))}
+    cmap = colors.LinearSegmentedColormap('green', cdict)
+    img = ax.imshow(image, extent=[xmin, xmax, ymax, ymin], norm=norm, cmap=cmap)
+    cax = div.append_axes("right", size=0.3, pad=0.4)
+    plt.colorbar(img, cax=cax)
+
     ax.set_aspect('equal')
     ax.set_facecolor('black')
     ax.set_xlim(gxmin, gxmax)
     ax.set_ylim(gymax, gymin)
-    plt.show()
 
+    if args.dir:
+        plt.savefig(os.path.join(dir, filename))
+    else:
+        plt.savefig(filename)
 
-args.target = None
 
 if args.target:
-    plot_target(input, args.target)
+    plot_target(args.target)
+elif args.sample:
+    plot_sample(args.sample)
 else:
-    for target in targets:
-        plot_target(input, target)
+    if args.samples:
+        samples = input['Sample'].unique()
+        if __name__ == '__main__':
+            with Pool(cpu_count()) as p:
+                p.map(plot_sample, samples)
+        # for sample in samples:
+        #     print(sample)
+        #     plot_sample(input, sample)
+    if args.targets or not args.samples:
+        targets = input['Gene'].unique()
+        if __name__ == '__main__':
+            with Pool(cpu_count()) as p:
+                p.map(plot_target, targets)
+        # for target in targets:
+        #     print(target)
+        #     plot_target(input, target)
