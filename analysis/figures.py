@@ -104,7 +104,6 @@ if args.log:
     logging.getLogger('matplotlib').setLevel(logging.INFO)
 
 input = pd.read_csv(args.data)
-input.loc[input['cy'] > 9, 'mCherry'] = input['mCherry'].min()
 
 gxmin = 0
 gxmax = 80
@@ -159,28 +158,6 @@ def plot_profiles(ax, data, ticks):
     return ax
 
 
-def plot_legends(fig, gs, rows, columns, img0, img1, img2, handles, labels, ticks):
-    origin = rows * columns * 5
-    cax = fig.add_subplot(gs[origin + 1])
-    cbar = fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=ticks,
-                        format=major_formatter_log, label='Mean target expression')
-    cbar.ax.margins(1.2, 0.2)
-
-    cax = fig.add_subplot(gs[origin + 2])
-    cbar = fig.colorbar(img1, cax=cax, orientation='horizontal', ticks=ticks,
-                        format=major_formatter_log, label='Max target expression')
-    cbar.ax.margins(0.2, 0.2)
-
-    cax = fig.add_subplot(gs[origin + 3])
-    cbar = fig.colorbar(img2, cax=cax, orientation='horizontal', ticks=ticks,
-                        format=major_formatter_log, label='Max target eccentricity')
-    cbar.ax.margins(0.2, 0.2)
-
-    cax = fig.add_subplot(gs[origin + 4])
-    cax.set_axis_off()
-    cax.legend(handles, labels, ncol=2, loc='center', frameon=False)
-
-
 @ticker.FuncFormatter
 def major_formatter_log(x, pos):
     return "%g" % (round(x * 10) / 10)
@@ -193,69 +170,151 @@ def genes_sorted(data):
     return ratio.sort_values(ascending=False).index.tolist()
 
 
-def fig_3_row(fig, gs, gene, index, rows, columns, ticks):
-    row = math.ceil(index / columns)
-    pos = (index - 1) * 5
-    data = input[input['Gene'] == gene]
-    if rows <= 13:
-        symbol = chr(ord('A') + (index - 1))
-    else:
-        major = math.floor((index - 1) / 26)
-        symbol = chr(ord('A') + major) + chr(ord('A') + (index - (26 * major) - 1))
-
-    def fig_3_image(position, channel, projection, cmap, norm):
-        text = symbol + '\'' * (position - 1)
-        img, ax = plot_image(fig.add_subplot(gs[pos + position]), data, channel, projection=projection,
-                             norm=norm, cmap=cmap)
-        ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
-                color='white', transform=ax.transAxes)
-        ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
-                       left=True, right=False, labelleft=True, labelright=False)
-        return img, ax
-
-    def fig_3_profile(position):
-        text = symbol + '\'' * (position - 1)
-        ax = plot_profiles(fig.add_subplot(gs[pos + position]), data, ticks)
-        ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
-                transform=ax.transAxes)
-        ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
-                       left=False, right=True, labelleft=False, labelright=True)
-        handles, labels = ax.get_legend_handles_labels()
-        ax.yaxis.set_major_formatter(major_formatter_log)
-        return ax, handles, labels
-
-    ax = fig.add_subplot(gs[pos])
-    ax.set_axis_off()
-    ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
-
-    norm = colors.LogNorm(vmin=0.1, vmax=30)
-    img0, ax = fig_3_image(1, 'Venus', 'mean', 'plasma', norm)
-    img1, ax = fig_3_image(2, 'Venus', 'max', 'plasma', norm)
-    norm = colors.LogNorm(vmin=0.1, vmax=25)
-    img2, ax = fig_3_image(3, 'ext_Venus', 'max', 'viridis', norm)
-    ax, handles, labels = fig_3_profile(4)
-
-    return img0, img1, img2, handles, labels
+# TODO: make this generic
+def e_series(min = 0, max = 100, res=3):
+    return [0.1, 0.22, 0.47, 1, 2.2, 4.7, 10, 22]
 
 
 def fig_3(data, columns):
     genes = genes_sorted(data)
     genes.remove('ato')
-    e_series = [0.1, 0.22, 0.47, 1, 2.2, 4.7, 10, 22]
     rows = math.ceil(len(genes) / columns)
     fig = plt.figure(figsize=(32, rows * 2.65))
     width_ratios = [item for sub in [[1], [16] * 4] * columns for item in sub]
     height_ratios = [item for sub in [[8] * rows, [1]] for item in sub]
     gs = gridspec.GridSpec(rows + 1, 5 * columns, width_ratios=width_ratios, height_ratios=height_ratios)
     legend_data = ()
+
+    def fig_3_row(gene, index, ticks):
+        row = math.ceil(index / columns)
+        pos = (index - 1) * 5
+        data = input[input['Gene'] == gene]
+        if rows <= 13:
+            symbol = chr(ord('A') + (index - 1))
+        else:
+            major = math.floor((index - 1) / 26)
+            symbol = chr(ord('A') + major) + chr(ord('A') + (index - (26 * major) - 1))
+
+        def fig_3_image(position, channel, projection, cmap, norm):
+            text = symbol + '\'' * (position - 1)
+            img, ax = plot_image(fig.add_subplot(gs[pos + position]), data, channel, projection=projection,
+                                 norm=norm, cmap=cmap)
+            ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
+                    color='white', transform=ax.transAxes)
+            ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
+                           left=True, right=False, labelleft=(position == 1), labelright=False)
+            return img, ax
+
+        def fig_3_profile(position):
+            text = symbol + '\'' * (position - 1)
+            ax = plot_profiles(fig.add_subplot(gs[pos + position]), data, ticks)
+            ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
+                    transform=ax.transAxes)
+            ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
+                           left=False, right=True, labelleft=False, labelright=True)
+            handles, labels = ax.get_legend_handles_labels()
+            ax.yaxis.set_major_formatter(major_formatter_log)
+            return ax, handles, labels
+
+        ax = fig.add_subplot(gs[pos])
+        ax.set_axis_off()
+        ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
+
+        norm = colors.LogNorm(vmin=0.1, vmax=30)
+        img0, ax = fig_3_image(1, 'Venus', 'mean', 'plasma', norm)
+        img1, ax = fig_3_image(2, 'Venus', 'max', 'plasma', norm)
+        norm = colors.LogNorm(vmin=0.1, vmax=25)
+        img2, ax = fig_3_image(3, 'ext_Venus', 'max', 'viridis', norm)
+        ax, handles, labels = fig_3_profile(4)
+
+        return img0, img1, img2, handles, labels
+
+    def fig_3_legends(img0, img1, img2, handles, labels, ticks):
+        origin = rows * columns * 5
+        cax = fig.add_subplot(gs[origin + 1])
+        cbar = fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=ticks,
+                            format=major_formatter_log, label='Mean target expression')
+
+        cax = fig.add_subplot(gs[origin + 2])
+        cbar = fig.colorbar(img1, cax=cax, orientation='horizontal', ticks=ticks,
+                            format=major_formatter_log, label='Max target expression')
+
+        cax = fig.add_subplot(gs[origin + 3])
+        cbar = fig.colorbar(img2, cax=cax, orientation='horizontal', ticks=ticks,
+                            format=major_formatter_log, label='Max target eccentricity')
+
+        cax = fig.add_subplot(gs[origin + 4])
+        cax.set_axis_off()
+        cax.legend(handles, labels, ncol=2, loc='center', frameon=False)
+
     for index, gene in enumerate(genes):
         print(index, gene)
-        legend_data = fig_3_row(fig, gs, gene, index + 1, rows, columns, e_series)
-    plot_legends(fig, gs, rows, columns, *legend_data, e_series)
+        legend_data = fig_3_row(gene, index + 1, e_series())
+
+    fig_3_legends(*legend_data, e_series())
+
     return fig
 
 
-fig = fig_3(input, 2)
+def fig_2(data):
+    rows = 4
+    columns = 1
+    fig = plt.figure(figsize=(12, rows * 2.65))
+    width_ratios = [item for item in [4] * 3]
+    height_ratios = [item for sub in [[8] * 3, [1], [8], [1]] for item in sub]
+    gs = gridspec.GridSpec(rows + 2, 3, width_ratios=width_ratios, height_ratios=height_ratios)
+
+    def fig_2_image(position, data, channel, projection, cmap, norm):
+        text = chr(ord('A') + (position - 1))
+        img, ax = plot_image(fig.add_subplot(gs[position - 1]), data, channel, projection=projection,
+                             norm=norm, cmap=cmap)
+        ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
+                color='white', transform=ax.transAxes)
+        ax.tick_params(bottom=True, top=True, labelbottom=(math.ceil(position / 3) == 3),
+                       labeltop=(math.ceil(position / 3) == 1), left=True, right=False,
+                       labelleft=(position % 3 == 1), labelright=False)
+        return img, ax
+
+    def fig_2_img_row(data, protein, row):
+        norm = colors.LogNorm(vmin=0.1, vmax=30)
+        img0, ax = fig_2_image((row - 1) * 3 + 1, data, protein, 'mean', 'plasma', norm)
+        img1, ax = fig_2_image((row - 1) * 3 + 2, data, protein, 'max', 'plasma', norm)
+        norm = colors.LogNorm(vmin=0.1, vmax=25)
+        img2, ax = fig_2_image((row - 1) * 3 + 3, data, 'ext_' + protein, 'max', 'viridis', norm)
+
+        return img0, img1, img2
+
+    ato = data[data['Gene'] == 'ato']
+    clean = ['CG31176', 'beat-IIIc', 'king-tubby', 'lola-P', 'nmo', 'sNPF', 'Vn', 'Fas2', 'siz']
+    ato_clean = data[data['Gene'].isin(clean)]
+    img0, img1, img2 = fig_2_img_row(data, 'mCherry', 1)
+    img0, img1, img2 = fig_2_img_row(ato_clean, 'mCherry', 2)
+    img0, img1, img2 = fig_2_img_row(ato, 'Venus', 3)
+
+    cax = fig.add_subplot(gs[9])
+    cbar = fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=e_series(),
+                        format=major_formatter_log, label='Mean expression')
+
+    cax = fig.add_subplot(gs[10])
+    cbar = fig.colorbar(img1, cax=cax, orientation='horizontal', ticks=e_series(),
+                        format=major_formatter_log, label='Max expression')
+
+    cax = fig.add_subplot(gs[11])
+    cbar = fig.colorbar(img2, cax=cax, orientation='horizontal', ticks=e_series(),
+                        format=major_formatter_log, label='Max eccentricity')
+
+    return fig
+
+
+fig = fig_2(input)
 fig.show()
 if args.outdir:
-    fig.savefig(os.path.join(args.outdir + 'figure_3.png'))
+    fig.savefig(os.path.join(args.outdir + 'figure_2.png'))
+
+# # Now that we know it's safe to strip Ato after row 9, let's do it!
+# input.loc[input['cy'] > 9, 'mCherry'] = input['mCherry'].min()
+#
+# fig = fig_3(input, 2)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_3.png'))
