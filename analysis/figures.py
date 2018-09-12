@@ -122,6 +122,12 @@ venus_max = input['Venus'].mean()
 vmin = 0.1
 vmax = 15
 
+clean = ['CG31176', 'beat-IIIc', 'king-tubby', 'lola-P', 'nmo', 'sNPF', 'Vn', 'Fas2', 'siz']
+
+# Remove artifact from sample ZBO7IH
+artifact = input[(input['Sample'] == 'ZBO7IH') & (input['cy'] > 35) & (input['cx'] > 20) & (input['cx'] < 30)].index
+input = input.drop(artifact)
+
 
 def plot_image(ax, data, channel, projection='mean', norm=None, cmap=None):
     xmin = round(data['cx'].min())
@@ -135,27 +141,6 @@ def plot_image(ax, data, channel, projection='mean', norm=None, cmap=None):
     ax.set_ylim(gymax, gymin)
     ax.xaxis.tick_top()
     return img, ax
-
-
-def plot_profiles(ax, data, ticks):
-    target_mean = data.groupby([round(data['cy'])])['Venus'].mean()
-    x = target_mean.index
-    y = savgol_filter(target_mean.values, 11, 3)
-    ax.plot(x, y, label='Target mean')
-    target_max = data.groupby([round(data['cy'])])['Venus'].quantile(0.99)
-    x = target_max.index
-    y = savgol_filter(target_max.values, 11, 3)
-    ax.plot(x, y, label='Target Q99')
-    ato = input.groupby([round(input['cy'])])['mCherry'].mean()
-    x = ato.index
-    y = savgol_filter(ato.values, 11, 3)
-    ax.plot(x, y, label='Ato protein')
-    ax.set_xlim(gymin, gymax)
-    ax.set_yscale('log')
-    ax.set_ylim(0.1, 30)
-    ax.set_yticks(ticks)
-    ax.yaxis.set_major_formatter(major_formatter_log)
-    return ax
 
 
 @ticker.FuncFormatter
@@ -175,6 +160,38 @@ def e_series(min = 0, max = 100, res=3):
     return [0.1, 0.22, 0.47, 1, 2.2, 4.7, 10, 22]
 
 
+def y_profile(data, channel):
+    return data.groupby([round(data['cy'])])[channel]
+
+
+def x_profile(data, channel):
+    return data[(data['cy'] >= -3) & (data['cy'] <= 3)].groupby([round(data['cx'])])[channel]
+
+
+def plot_profile(ax, data, label, linestyle=None, color=None):
+    x = data.index
+    y = savgol_filter(data.values, 5, 3, mode='nearest')
+    ax.plot(x, y, label=label, linestyle=linestyle, color=color)
+
+
+def format_axis(ax, ticks, axis='y'):
+    if axis == 'y':
+        ax.set_xlim(gymin, gymax)
+    else:
+        ax.set_xlim(gxmin, gxmax)
+    ax.set_yscale('log')
+    ax.set_ylim(0.1, 30)
+    ax.set_yticks(ticks)
+    ax.yaxis.set_major_formatter(major_formatter_log)
+
+
+def plot_profiles(ax, profiles, styles, ticks, axis='y'):
+    for index, profile in enumerate(profiles):
+        plot_profile(ax, profile, **styles[index])
+    format_axis(ax, ticks, axis)
+    return ax.get_legend_handles_labels()
+
+
 def fig_3(data, columns):
     genes = genes_sorted(data)
     genes.remove('ato')
@@ -184,6 +201,7 @@ def fig_3(data, columns):
     height_ratios = [item for sub in [[8] * rows, [1]] for item in sub]
     gs = gridspec.GridSpec(rows + 1, 5 * columns, width_ratios=width_ratios, height_ratios=height_ratios)
     legend_data = ()
+    ato = y_profile(data[data['Gene'].isin(clean)], 'mCherry')
 
     def fig_3_row(gene, index, ticks):
         row = math.ceil(index / columns)
@@ -207,11 +225,17 @@ def fig_3(data, columns):
 
         def fig_3_profile(position):
             text = symbol + '\'' * (position - 1)
-            ax = plot_profiles(fig.add_subplot(gs[pos + position]), data, ticks)
+            target = y_profile(data, 'Venus')
+            ax = fig.add_subplot(gs[pos + position])
+            profiles = [target.mean(), target.quantile(0.99), ato.mean()]
+            styles = [{'label': 'Target mean'}, {'label': 'Target Q99'}, {'label': 'Ato protein'}]
+            plot_profiles(ax, profiles, styles, ticks)
+            format_axis(ax, ticks)
             ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
                     transform=ax.transAxes)
             ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
                            left=False, right=True, labelleft=False, labelright=True)
+            ax.tick_params(axis='y', which='minor', left=False, right=False, labelleft=False, labelright=False)
             handles, labels = ax.get_legend_handles_labels()
             ax.yaxis.set_major_formatter(major_formatter_log)
             return ax, handles, labels
@@ -232,17 +256,14 @@ def fig_3(data, columns):
     def fig_3_legends(img0, img1, img2, handles, labels, ticks):
         origin = rows * columns * 5
         cax = fig.add_subplot(gs[origin + 1])
-        cbar = fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=ticks,
-                            format=major_formatter_log, label='Mean target expression')
-
+        fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=ticks,
+                     format=major_formatter_log, label='Mean target expression')
         cax = fig.add_subplot(gs[origin + 2])
-        cbar = fig.colorbar(img1, cax=cax, orientation='horizontal', ticks=ticks,
-                            format=major_formatter_log, label='Max target expression')
-
+        fig.colorbar(img1, cax=cax, orientation='horizontal', ticks=ticks,
+                     format=major_formatter_log, label='Max target expression')
         cax = fig.add_subplot(gs[origin + 3])
-        cbar = fig.colorbar(img2, cax=cax, orientation='horizontal', ticks=ticks,
-                            format=major_formatter_log, label='Max target eccentricity')
-
+        fig.colorbar(img2, cax=cax, orientation='horizontal', ticks=ticks,
+                     format=major_formatter_log, label='Max target eccentricity')
         cax = fig.add_subplot(gs[origin + 4])
         cax.set_axis_off()
         cax.legend(handles, labels, ncol=2, loc='center', frameon=False)
@@ -250,7 +271,6 @@ def fig_3(data, columns):
     for index, gene in enumerate(genes):
         print(index, gene)
         legend_data = fig_3_row(gene, index + 1, e_series())
-
     fig_3_legends(*legend_data, e_series())
 
     return fig
@@ -258,11 +278,12 @@ def fig_3(data, columns):
 
 def fig_2(data):
     rows = 4
-    columns = 1
-    fig = plt.figure(figsize=(12, rows * 2.65))
+    fig = plt.figure(figsize=(12, rows * 3))
     width_ratios = [item for item in [4] * 3]
-    height_ratios = [item for sub in [[8] * 3, [1], [8], [1]] for item in sub]
+    height_ratios = [item for sub in [[8] * 3, [1], [8], [4]] for item in sub]
     gs = gridspec.GridSpec(rows + 2, 3, width_ratios=width_ratios, height_ratios=height_ratios)
+    data_ato = data[data['Gene'] == 'ato']
+    data_clean = data[data['Gene'].isin(clean)]
 
     def fig_2_image(position, data, channel, projection, cmap, norm):
         text = chr(ord('A') + (position - 1))
@@ -284,24 +305,70 @@ def fig_2(data):
 
         return img0, img1, img2
 
-    ato = data[data['Gene'] == 'ato']
-    clean = ['CG31176', 'beat-IIIc', 'king-tubby', 'lola-P', 'nmo', 'sNPF', 'Vn', 'Fas2', 'siz']
-    ato_clean = data[data['Gene'].isin(clean)]
-    img0, img1, img2 = fig_2_img_row(data, 'mCherry', 1)
-    img0, img1, img2 = fig_2_img_row(ato_clean, 'mCherry', 2)
-    img0, img1, img2 = fig_2_img_row(ato, 'Venus', 3)
+    def fig_2_colorbar(position, img, label):
+        cax = fig.add_subplot(gs[position])
+        cbar = fig.colorbar(img, cax=cax, orientation='horizontal', ticks=e_series(),
+                            format=major_formatter_log, label=label)
 
-    cax = fig.add_subplot(gs[9])
-    cbar = fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=e_series(),
-                        format=major_formatter_log, label='Mean expression')
+    def fig_2_profile_row(ticks):
 
-    cax = fig.add_subplot(gs[10])
-    cbar = fig.colorbar(img1, cax=cax, orientation='horizontal', ticks=e_series(),
-                        format=major_formatter_log, label='Max expression')
+        def plot_profiles(position, profiles, styles, axis='y'):
+            ax = fig.add_subplot(gs[position])
+            text = chr(ord('A') + (position - 3))
+            ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
+                    color='black', transform=ax.transAxes)
+            for index, profile in enumerate(profiles):
+                plot_profile(ax, profile, **styles[index])
+            format_axis(ax, ticks, axis)
+            ax.tick_params(bottom=True, top=False, labelbottom=True, labeltop=False,
+                           left=True, right=False, labelleft=(position % 3 == 0), labelright=False)
+            ax.tick_params(axis='y', which='minor', left=False, right=False, labelleft=False, labelright=False)
+            return ax.get_legend_handles_labels()
 
-    cax = fig.add_subplot(gs[11])
-    cbar = fig.colorbar(img2, cax=cax, orientation='horizontal', ticks=e_series(),
-                        format=major_formatter_log, label='Max eccentricity')
+        ato_protein = y_profile(data, 'mCherry')
+        ato_clean = y_profile(data_clean, 'mCherry')
+        ato_reporter = y_profile(data_ato, 'Venus')
+        ato_clean_x = x_profile(data_clean, 'mCherry')
+        ato_reporter_x = x_profile(data[data['Gene'] == 'ato'], 'Venus')
+
+        profiles = [ato_protein.mean(), ato_protein.quantile(0.99), ato_clean.mean(), ato_clean.quantile(0.99)]
+        styles = [
+            {'label': 'Protein mean', 'linestyle': 'dotted', 'color': '#2ca02c'},
+            {'label': 'Protein Q99', 'linestyle': 'dotted', 'color': '#d62728'},
+            {'label': 'Protein (clean) mean', 'color': '#2ca02c'},
+            {'label': 'Protein (clean) Q99', 'color': '#d62728'}
+        ]
+        handles, labels = plot_profiles(12, profiles, styles)
+
+        profiles = [ato_reporter.mean(), ato_reporter.quantile(0.99), ato_clean.mean()]
+        styles = [
+            {'label': 'Reporter mean'},
+            {'label': 'Reporter Q99'},
+            {'label': 'Protein (clean) mean'}
+        ]
+        handles1, labels1 = plot_profiles(13, profiles, styles)
+
+        profiles = [ato_reporter_x.mean(), ato_reporter_x.quantile(0.99), ato_clean_x.mean()]
+        plot_profiles(14, profiles, styles, 'x')
+
+        handles.append(handles1[0])
+        handles.append(handles1[1])
+        labels.append(labels1[0])
+        labels.append(labels1[1])
+
+        ax = fig.add_subplot(gs[5, 0:])
+        ax.set_axis_off()
+        ax.legend(handles, labels, ncol=3, loc='center', frameon=False)
+
+    fig_2_img_row(data, 'mCherry', 1)
+    fig_2_img_row(data_clean, 'mCherry', 2)
+    img0, img1, img2 = fig_2_img_row(data_ato, 'Venus', 3)
+
+    fig_2_colorbar(9, img0, 'Mean expression')
+    fig_2_colorbar(10, img1, 'Max expression')
+    fig_2_colorbar(11, img0, 'Max eccentricity')
+
+    fig_2_profile_row(e_series())
 
     return fig
 
@@ -309,12 +376,9 @@ def fig_2(data):
 fig = fig_2(input)
 fig.show()
 if args.outdir:
-    fig.savefig(os.path.join(args.outdir + 'figure_2.png'))
+    fig.savefig(os.path.join(args.outdir, 'figure_2.png'))
 
-# # Now that we know it's safe to strip Ato after row 9, let's do it!
-# input.loc[input['cy'] > 9, 'mCherry'] = input['mCherry'].min()
-#
-# fig = fig_3(input, 2)
-# fig.show()
-# if args.outdir:
-#     fig.savefig(os.path.join(args.outdir, 'figure_3.png'))
+fig = fig_3(input, 2)
+fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_3.png'))
