@@ -366,7 +366,7 @@ def fig_2(data):
 
     fig_2_colorbar(9, img0, 'Mean expression')
     fig_2_colorbar(10, img1, 'Max expression')
-    fig_2_colorbar(11, img0, 'Max eccentricity')
+    fig_2_colorbar(11, img2, 'Max eccentricity')
 
     fig_2_profile_row(e_series())
 
