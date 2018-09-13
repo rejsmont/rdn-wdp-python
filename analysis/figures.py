@@ -192,7 +192,7 @@ def plot_profiles(ax, profiles, styles, ticks, axis='y'):
     return ax.get_legend_handles_labels()
 
 
-def fig_3(data, columns):
+def fig_79eb(data, columns):
     genes = genes_sorted(data)
     genes.remove('ato')
     rows = math.ceil(len(genes) / columns)
@@ -203,7 +203,7 @@ def fig_3(data, columns):
     legend_data = ()
     ato = y_profile(data[data['Gene'].isin(clean)], 'mCherry')
 
-    def fig_3_row(gene, index, ticks):
+    def fig_79eb_row(gene, index, ticks):
         row = math.ceil(index / columns)
         pos = (index - 1) * 5
         data = input[input['Gene'] == gene]
@@ -213,7 +213,7 @@ def fig_3(data, columns):
             major = math.floor((index - 1) / 26)
             symbol = chr(ord('A') + major) + chr(ord('A') + (index - (26 * major) - 1))
 
-        def fig_3_image(position, channel, projection, cmap, norm):
+        def fig_79eb_image(position, channel, projection, cmap, norm):
             text = symbol + '\'' * (position - 1)
             img, ax = plot_image(fig.add_subplot(gs[pos + position]), data, channel, projection=projection,
                                  norm=norm, cmap=cmap)
@@ -223,7 +223,7 @@ def fig_3(data, columns):
                            left=True, right=False, labelleft=(position == 1), labelright=False)
             return img, ax
 
-        def fig_3_profile(position):
+        def fig_79eb_profile(position):
             text = symbol + '\'' * (position - 1)
             target = y_profile(data, 'Venus')
             ax = fig.add_subplot(gs[pos + position])
@@ -245,15 +245,15 @@ def fig_3(data, columns):
         ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
 
         norm = colors.LogNorm(vmin=0.1, vmax=30)
-        img0, ax = fig_3_image(1, 'Venus', 'mean', 'plasma', norm)
-        img1, ax = fig_3_image(2, 'Venus', 'max', 'plasma', norm)
+        img0, ax = fig_79eb_image(1, 'Venus', 'mean', 'plasma', norm)
+        img1, ax = fig_79eb_image(2, 'Venus', 'max', 'plasma', norm)
         norm = colors.LogNorm(vmin=0.1, vmax=25)
-        img2, ax = fig_3_image(3, 'ext_Venus', 'max', 'viridis', norm)
-        ax, handles, labels = fig_3_profile(4)
+        img2, ax = fig_79eb_image(3, 'ext_Venus', 'max', 'viridis', norm)
+        ax, handles, labels = fig_79eb_profile(4)
 
         return img0, img1, img2, handles, labels
 
-    def fig_3_legends(img0, img1, img2, handles, labels, ticks):
+    def fig_79eb_legends(img0, img1, img2, handles, labels, ticks):
         origin = rows * columns * 5
         cax = fig.add_subplot(gs[origin + 1])
         fig.colorbar(img0, cax=cax, orientation='horizontal', ticks=ticks,
@@ -270,13 +270,13 @@ def fig_3(data, columns):
 
     for index, gene in enumerate(genes):
         print(index, gene)
-        legend_data = fig_3_row(gene, index + 1, e_series())
-    fig_3_legends(*legend_data, e_series())
+        legend_data = fig_79eb_row(gene, index + 1, e_series())
+    fig_79eb_legends(*legend_data, e_series())
 
     return fig
 
 
-def fig_2(data):
+def fig_3d51(data):
     rows = 4
     fig = plt.figure(figsize=(12, rows * 3))
     width_ratios = [item for item in [4] * 3]
@@ -285,7 +285,7 @@ def fig_2(data):
     data_ato = data[data['Gene'] == 'ato']
     data_clean = data[data['Gene'].isin(clean)]
 
-    def fig_2_image(position, data, channel, projection, cmap, norm):
+    def fig_3d51_image(position, data, channel, projection, cmap, norm):
         text = chr(ord('A') + (position - 1))
         img, ax = plot_image(fig.add_subplot(gs[position - 1]), data, channel, projection=projection,
                              norm=norm, cmap=cmap)
@@ -296,21 +296,21 @@ def fig_2(data):
                        labelleft=(position % 3 == 1), labelright=False)
         return img, ax
 
-    def fig_2_img_row(data, protein, row):
+    def fig_3d51_img_row(data, protein, row):
         norm = colors.LogNorm(vmin=0.1, vmax=30)
-        img0, ax = fig_2_image((row - 1) * 3 + 1, data, protein, 'mean', 'plasma', norm)
-        img1, ax = fig_2_image((row - 1) * 3 + 2, data, protein, 'max', 'plasma', norm)
+        img0, ax = fig_3d51_image((row - 1) * 3 + 1, data, protein, 'mean', 'plasma', norm)
+        img1, ax = fig_3d51_image((row - 1) * 3 + 2, data, protein, 'max', 'plasma', norm)
         norm = colors.LogNorm(vmin=0.1, vmax=25)
-        img2, ax = fig_2_image((row - 1) * 3 + 3, data, 'ext_' + protein, 'max', 'viridis', norm)
+        img2, ax = fig_3d51_image((row - 1) * 3 + 3, data, 'ext_' + protein, 'max', 'viridis', norm)
 
         return img0, img1, img2
 
-    def fig_2_colorbar(position, img, label):
+    def fig_3d51_colorbar(position, img, label):
         cax = fig.add_subplot(gs[position])
         cbar = fig.colorbar(img, cax=cax, orientation='horizontal', ticks=e_series(),
                             format=major_formatter_log, label=label)
 
-    def fig_2_profile_row(ticks):
+    def fig_3d51_profile_row(ticks):
 
         def plot_profiles(position, profiles, styles, axis='y'):
             ax = fig.add_subplot(gs[position])
@@ -360,25 +360,25 @@ def fig_2(data):
         ax.set_axis_off()
         ax.legend(handles, labels, ncol=3, loc='center', frameon=False)
 
-    fig_2_img_row(data, 'mCherry', 1)
-    fig_2_img_row(data_clean, 'mCherry', 2)
-    img0, img1, img2 = fig_2_img_row(data_ato, 'Venus', 3)
+    fig_3d51_img_row(data, 'mCherry', 1)
+    fig_3d51_img_row(data_clean, 'mCherry', 2)
+    img0, img1, img2 = fig_3d51_img_row(data_ato, 'Venus', 3)
 
-    fig_2_colorbar(9, img0, 'Mean expression')
-    fig_2_colorbar(10, img1, 'Max expression')
-    fig_2_colorbar(11, img2, 'Max eccentricity')
+    fig_3d51_colorbar(9, img0, 'Mean expression')
+    fig_3d51_colorbar(10, img1, 'Max expression')
+    fig_3d51_colorbar(11, img2, 'Max eccentricity')
 
-    fig_2_profile_row(e_series())
+    fig_3d51_profile_row(e_series())
 
     return fig
 
 
-fig = fig_2(input)
+fig = fig_3d51(input)
 fig.show()
 if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_2.png'))
+    fig.savefig(os.path.join(args.outdir, 'figure_3d51.png'))
 
-fig = fig_3(input, 2)
+fig = fig_79eb(input, 2)
 fig.show()
 if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_3.png'))
+    fig.savefig(os.path.join(args.outdir, 'figure_79eb.png'))
