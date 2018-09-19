@@ -203,6 +203,7 @@ def x_profile(data, channel):
 def plot_profile(ax, data, label, linestyle=None, color=None):
     x = data.index
     y = savgol_filter(data.values, 5, 3, mode='nearest')
+    # y = data.values
     ax.plot(x, y, label=label, linestyle=linestyle, color=color)
 
 
@@ -448,16 +449,14 @@ def fig_32b7(data, columns=5):
     ato = y_profile(cells[cells['Gene'].isin(clean)], 'mCherry')
 
     for index, gene in enumerate(genes):
-        print(gene)
         row = math.ceil((index + 1) / columns)
         ato_gene_cells = ato_cells[ato_cells['Gene'] == gene]
         no_ato_gene_cells = no_ato_cells[no_ato_cells['Gene'] == gene]
         ato_target = y_profile(ato_gene_cells, 'Venus')
         no_ato_target = y_profile(no_ato_gene_cells, 'Venus')
-        response = ato_response(ato_target.mean(), no_ato_target.mean(), ato.mean())
         ax = fig.add_subplot(gs[index])
-        profiles = [ato_target.mean(), no_ato_target.mean(), ato.mean(), response]
-        styles = [{'label': 'Target mean (ato+)'}, {'label': 'Target mean (ato-)'}, {'label': 'Ato protein'}, {'label': 'response'}]
+        profiles = [ato_target.mean(), no_ato_target.mean(), ato.mean()]
+        styles = [{'label': 'Target mean (ato+)'}, {'label': 'Target mean (ato-)'}, {'label': 'Ato protein'}]
         plot_profiles(ax, profiles, styles, e_series())
         ax.set_xlim(-10, 10)
         ax.set_yscale('log')
@@ -472,10 +471,6 @@ def fig_32b7(data, columns=5):
         handles, labels = ax.get_legend_handles_labels()
         ax.yaxis.set_major_formatter(major_formatter_log)
 
-    # ato_cell_count = ato_cells.groupby([round(data['cy'])]).size()
-    # noato_cell_count = noato_cells.groupby([round(data['cy'])]).size()
-    # total_cell_count = ato_cell_count + noato_cell_count
-    # percent_ato = ato_cell_count / total_cell_count
     ax = fig.add_subplot(gs[len(genes):])
     ax.set_axis_off()
     ax.legend(handles, labels, ncol=1, loc='center', frameon=False)
@@ -483,91 +478,62 @@ def fig_32b7(data, columns=5):
     return fig
 
 
-def dtw_distance(d1, d2, w):
+def dtw_distance(d1, d2, word=5):
     s1 = d1.values
     s2 = d2.values
     dwt = {}
-    w = max(w, abs(len(s1)-len(s2)))
+    word = max(word, abs(len(s1) - len(s2)))
     for i in range(-1, len(s1)):
         for j in range(-1, len(s2)):
             dwt[(i, j)] = float('inf')
     dwt[(-1, -1)] = 0
     for i in range(len(s1)):
-        for j in range(max(0, i-w), min(len(s2), i+w)):
+        for j in range(max(0, i - word), min(len(s2), i + word)):
             dist = (s1[i]-s2[j])**2
             dwt[(i, j)] = dist + min(dwt[(i-1, j)], dwt[(i, j-1)], dwt[(i-1, j-1)])
 
     return math.sqrt(dwt[len(s1)-1, len(s2)-1])
 
 
-def pd_distance(d1, d2, w):
-    s1 = d1
-    s2 = d2
+def pd_distance(d1, d2, factor=1, normalize=False):
+    s1 = d1 / d1.mean() if normalize else d1
+    s2 = d2 / d2.mean() if normalize else d2
 
-    distances = s1.subtract(s2).abs()
-    indices = distances.index
+    distances = s1.subtract(s2).abs().dropna()
+    indices = distances.index.values
+    factors = np.power(factor, np.abs(indices))
+    distance = np.sum(distances.values * factors) / len(indices)
 
-    return distances.sum() / distances.count()
-
-
-def lb_keogh(d1, d2, r):
-    s1 = d1.values
-    s2 = d2.values
-    lb_sum = 0
-    for ind, i in enumerate(s1):
-        lower_bound = min(s2[(ind-r if ind-r >= 0 else 0):(ind+r)])
-        upper_bound = max(s2[(ind-r if ind-r >= 0 else 0):(ind+r)])
-        if i > upper_bound:
-            lb_sum = lb_sum+(i-upper_bound)**2
-        elif i < lower_bound:
-            lb_sum = lb_sum+(i-lower_bound)**2
-
-    return math.sqrt(lb_sum)
+    return distance
 
 
-def k_means_cluster(data, n_clusters, num_iter, w=5):
-    centroids = random.sample(data, n_clusters)
-    counter = 0
-    for n in range(num_iter):
-        counter += 1
-        print(counter)
-        assignments = {}
-        for ind, i in enumerate(data):
-            min_dist = float('inf')
-            closest_cluster = None
-            for c_ind, j in enumerate(centroids):
-                if lb_keogh(i, j, 5) < min_dist:
-                    cur_dist = dtw_distance(i, j, w)
-                    if cur_dist < min_dist:
-                        min_dist = cur_dist
-                        closest_cluster = c_ind
-            if closest_cluster in assignments:
-                assignments[closest_cluster].append(ind)
-            else:
-                assignments[closest_cluster] = []
-        for key in assignments:
-            cluster_sum = 0
-            for k in assignments[key]:
-                cluster_sum = cluster_sum+data[k]
-            centroids[key] = [m/len(assignments[key]) for m in cluster_sum]
-
-    return centroids
-
-
-def distance_matrix(data, w=5, dfun=dtw_distance):
+def distance_matrix(data, dfun=dtw_distance, *args, **kwargs):
     matrix = np.full((len(data), len(data)), float('inf'))
 
     for i in range(0, len(data)):
         a = data[i]
         for j in range(0, i + 1):
             b = data[j]
-            matrix[i, j] = dfun(a, b, w)
+            matrix[i, j] = dfun(a, b, **kwargs)
 
     for j in range(0, len(data)):
         for i in range(0, j + 1):
             matrix[i, j] = matrix[j, i]
 
     return matrix
+
+
+def power_matrices(matrices, exponents):
+    result = []
+    for index, matrix in enumerate(matrices):
+        result.append(np.power(matrix, exponents[index]))
+    return result
+
+
+def smoothen(data, window, rank):
+    index = data.index
+    values = savgol_filter(data.values, window, rank, mode='nearest')
+    return pd.DataFrame(values, index)
 
 
 def fig_01a8(data):
@@ -578,23 +544,31 @@ def fig_01a8(data):
     no_ato_cells = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
     ato = y_profile(cells[cells['Gene'].isin(clean)], 'mCherry').mean()
 
-    profiles = []
+    target_profiles = []
+    no_target_profiles = []
+    diff_profiles = []
 
     for index, gene in enumerate(genes):
         ato_gene_cells = ato_cells[ato_cells['Gene'] == gene]
         no_ato_gene_cells = no_ato_cells[no_ato_cells['Gene'] == gene]
-        ato_target = y_profile(ato_gene_cells, 'Venus').mean()
-        no_ato_target = y_profile(no_ato_gene_cells, 'Venus').mean()
-        response = ato_response(ato_target, no_ato_target, ato)
-        profiles.append(response)
+        target = smoothen(y_profile(ato_gene_cells, 'Venus').mean(), 9, 3)
+        no_target = smoothen(y_profile(no_ato_gene_cells, 'Venus').mean(), 9, 3)
+        target_profiles.append(target)
+        no_target_profiles.append(no_target)
+        diff_profiles.append((target / no_target).dropna())
 
-    matrix = distance_matrix(profiles, 5, pd_distance)
+    factor = 0.95
+    exponents = [2, 1, 0]
+    matrices = [distance_matrix(target_profiles, dfun=pd_distance, factor=factor, normalize=True),
+                distance_matrix(no_target_profiles, dfun=pd_distance, factor=factor, normalize=True),
+                distance_matrix(diff_profiles, dfun=pd_distance, factor=factor)]
+    matrix = np.power(np.product(np.stack(power_matrices(matrices, exponents)), axis=0), 1 / np.sum(exponents))
     distances = squareform(matrix)
     linkage_matrix = linkage(distances, "single")
-    dendrogram(linkage_matrix, labels=genes)
-    plt.show()
-    plt.xticks(rotation=90)
-    return matrix
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90)
+    return fig
 
 
 def fig_93ea(data, columns=5):
@@ -635,6 +609,8 @@ def fig_93ea(data, columns=5):
 #
 fig = fig_32b7(input)
 fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_32b7.png'))
 #
 # fig = fig_01a8(input)
 # fig.show()
@@ -642,4 +618,6 @@ fig.show()
 # fig = fig_93ea(input)
 # fig.show()
 
-matrix = fig_01a8(input)
+fig = fig_01a8(input)
+fig.show()
+
