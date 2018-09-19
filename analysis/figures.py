@@ -202,7 +202,6 @@ def x_profile(data, channel):
 def plot_profile(ax, data, label, linestyle=None, color=None):
     x = data.index
     y = savgol_filter(data.values, 9, 3, mode='nearest')
-    # y = data.values
     ax.plot(x, y, label=label, linestyle=linestyle, color=color)
 
 
@@ -222,6 +221,17 @@ def plot_profiles(ax, profiles, styles, ticks, axis='y'):
         plot_profile(ax, profile, **styles[index])
     format_axis(ax, ticks, axis)
     return ax.get_legend_handles_labels()
+
+
+def plot_profile_2(ax, data, filter=None, style={}):
+    x = data.index
+    y = filter(data.values) if filter else data.values
+    ax.plot(x, y, label=data, **style)
+
+
+def plot_profiles_2(ax, profiles, styles, ticks, axis='y'):
+    for profile in profiles:
+        plot_profile_2(ax, profile, styles[profile])
 
 
 def fig_79eb(data, columns):
