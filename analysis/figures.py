@@ -41,7 +41,6 @@ import scipy.optimize
 # 9d28
 
 
-
 def disc_matrix(disc, field, method='max'):
     """
     :param disc:        Data to process
@@ -202,7 +201,7 @@ def x_profile(data, channel):
 
 def plot_profile(ax, data, label, linestyle=None, color=None):
     x = data.index
-    y = savgol_filter(data.values, 5, 3, mode='nearest')
+    y = savgol_filter(data.values, 9, 3, mode='nearest')
     # y = data.values
     ax.plot(x, y, label=label, linestyle=linestyle, color=color)
 
@@ -542,7 +541,6 @@ def fig_01a8(data):
     background = data[(data['cy'] >= -10) & (data['cy'] <= -5)]
     ato_cells = cells[(cells['mCherry'] > background['mCherry'].quantile(0.90))]
     no_ato_cells = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
-    ato = y_profile(cells[cells['Gene'].isin(clean)], 'mCherry').mean()
 
     target_profiles = []
     no_target_profiles = []
@@ -597,27 +595,84 @@ def fig_93ea(data, columns=5):
     return fig
 
 
-# fig = fig_3d51(input)
-# fig.show()
-# if args.outdir:
-#     fig.savefig(os.path.join(args.outdir, 'figure_3d51.png'))
-#
-# fig = fig_79eb(input, 2)
-# fig.show()
-# if args.outdir:
-#     fig.savefig(os.path.join(args.outdir, 'figure_79eb.png'))
-#
+def fig_d3a8(data, columns=5):
+    genes = genes_sorted(data)
+    cells = data[(data['cy'] > -10) & (data['cy'] < 10)]
+    background = data[(data['cy'] >=-10) & (data['cy'] <= -5)]
+    ato_cells = cells[(cells['mCherry'] > background['mCherry'].quantile(0.90))]
+    no_ato_cells = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
+    rows = math.ceil(len(genes) / columns)
+    fig = plt.figure(figsize=(15, rows * 3))
+    gs = gridspec.GridSpec(rows, columns)
+    ato = y_profile(cells[cells['Gene'].isin(clean)], 'mCherry')
+
+    for index, gene in enumerate(genes):
+        row = math.ceil((index + 1) / columns)
+        ato_gene_cells = ato_cells[ato_cells['Gene'] == gene]
+        no_ato_gene_cells = no_ato_cells[no_ato_cells['Gene'] == gene]
+        profiles = pd.DataFrame()
+        profiles['ato'] = y_profile(ato_gene_cells, 'Venus').mean()
+        profiles['no_ato'] = y_profile(no_ato_gene_cells, 'Venus').mean()
+        profiles = profiles.dropna()
+
+        gradients = pd.DataFrame(index=profiles.index)
+        gradients['ato'] = np.gradient(savgol_filter(profiles['ato'].values, 9, 3, mode='nearest'))
+        gradients['no_ato'] = np.gradient(savgol_filter(profiles['no_ato'].values, 9, 3, mode='nearest'))
+
+        ax = fig.add_subplot(gs[index])
+        profiles = [gradients['ato'], gradients['no_ato'], ato.mean()]
+        styles = [{'label': 'Target gradient (ato+)'}, {'label': 'Target gradient (ato-)'}, {'label': 'Ato protein'}]
+        plot_profiles(ax, profiles, styles, e_series())
+
+        gradients['ato_smooth'] = savgol_filter(gradients['ato'].values, 9, 3, mode='nearest')
+        gradients['no_ato_smooth'] = savgol_filter(gradients['no_ato'].values, 9, 3, mode='nearest')
+        ax.fill_between(gradients.index, gradients['ato_smooth'], gradients['no_ato_smooth'],
+                        where=gradients['ato_smooth'] >= gradients['no_ato_smooth'], color='red', interpolate=True)
+        ax.set_xlim(-10, 10)
+        ax.set_yscale('linear')
+        ax.set_ylim(-0.2, 1)
+        ax.set_yticks(np.linspace(-0.2, 1, 7))
+        ax.text(0.025, 0.95, gene, horizontalalignment='left', verticalalignment='top', fontsize=24,
+                transform=ax.transAxes)
+        ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
+                       left=True, right=False, labelleft=(index % 5 == 0), labelright=False)
+        ax.tick_params(axis='y', which='minor', left=False, right=False, labelleft=False, labelright=False)
+        handles, labels = ax.get_legend_handles_labels()
+        ax.yaxis.set_major_formatter(major_formatter_log)
+
+    ax = fig.add_subplot(gs[len(genes):])
+    ax.set_axis_off()
+    ax.legend(handles, labels, ncol=1, loc='center', frameon=False)
+
+    return fig
+
+
+fig = fig_3d51(input)
+fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_3d51.png'))
+
+fig = fig_79eb(input, 2)
+fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_79eb.png'))
+
 fig = fig_32b7(input)
 fig.show()
-# if args.outdir:
-#     fig.savefig(os.path.join(args.outdir, 'figure_32b7.png'))
-#
-# fig = fig_01a8(input)
-# fig.show()
-#
-# fig = fig_93ea(input)
-# fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_32b7.png'))
+
+fig = fig_93ea(input)
+fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_93ea.png'))
 
 fig = fig_01a8(input)
 fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_01a8.png'))
 
+fig = fig_d3a8(input)
+fig.show()
+if args.outdir:
+    fig.savefig(os.path.join(args.outdir, 'figure_d3a8.png'))
