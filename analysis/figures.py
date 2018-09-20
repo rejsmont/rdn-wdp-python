@@ -19,9 +19,9 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.signal import savgol_filter
 from scipy.spatial.distance import squareform
 import scipy.optimize
+from shapely.geometry import Polygon
 
 # Figure labels:
-# d3a8
 # ceb2
 # 9a76
 # 5bd1
@@ -223,15 +223,19 @@ def plot_profiles(ax, profiles, styles, ticks, axis='y'):
     return ax.get_legend_handles_labels()
 
 
-def plot_profile_2(ax, data, filter=None, style={}):
+def plot_profile_2(ax, data, preprocessor=None, style=None):
     x = data.index
-    y = filter(data.values) if filter else data.values
+    y = preprocessor(data.values) if preprocessor else data.values
     ax.plot(x, y, label=data, **style)
 
 
-def plot_profiles_2(ax, profiles, styles, ticks, axis='y'):
+def plot_profiles_2(ax, profiles, ticks, styles=None, preprocessors=None, axis='y'):
     for profile in profiles:
-        plot_profile_2(ax, profile, styles[profile])
+        preprocessor = preprocessors[profile] if preprocessors and preprocessors[profile] else None
+        style = styles[profile] if styles and styles[profile] else None
+        plot_profile_2(ax, profile, preprocessor=preprocessor, style=style)
+    format_axis(ax, ticks, axis)
+    return ax.get_legend_handles_labels()
 
 
 def fig_79eb(data, columns):
@@ -244,6 +248,7 @@ def fig_79eb(data, columns):
     gs = gridspec.GridSpec(rows + 1, 5 * columns, width_ratios=width_ratios, height_ratios=height_ratios)
     legend_data = ()
     ato = y_profile(data[data['Gene'].isin(clean)], 'mCherry')
+    ato_mean = ato.mean()
 
     def fig_79eb_row(gene, index, ticks):
         row = math.ceil(index / columns)
@@ -269,9 +274,11 @@ def fig_79eb(data, columns):
             text = symbol + '\'' * (position - 1)
             target = y_profile(data, 'Venus')
             ax = fig.add_subplot(gs[pos + position])
-            profiles = [target.mean(), target.quantile(0.99), ato.mean()]
-            styles = [{'label': 'Target mean'}, {'label': 'Target Q99'}, {'label': 'Ato protein'}]
-            plot_profiles(ax, profiles, styles, ticks)
+            profiles = pd.DataFrame()
+            profiles['Target mean'] = target.mean()
+            profiles['Target Q99'] = target.quantile(0.99)
+            profiles['Ato protein'] = ato_mean
+            plot_profiles_2(ax, profiles, ticks=ticks)
             format_axis(ax, ticks)
             ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
                     transform=ax.transAxes)
@@ -415,37 +422,6 @@ def fig_3d51(data):
     return fig
 
 
-def sigmoid(p, x):
-    x0, y0, c, k = p
-    y = c / (1 + np.exp(-k*(x-x0))) + y0
-    return y
-
-
-def residuals(p,x,y):
-    return y - sigmoid(p,x)
-
-
-def sigmoidize(data):
-    x = data.index
-    y = data.values
-
-    p_guess = (np.median(x), np.median(y), 1.0, 1.0)
-    p, cov, infodict, mesg, ier = scipy.optimize.leastsq(
-        residuals, p_guess, args=(x, y), full_output=1)
-
-    return pd.DataFrame(sigmoid(p, x), x)
-
-
-def ato_response(ato_target, no_ato_target, ato):
-
-    target = sigmoidize(ato_target)
-    no_target = sigmoidize(no_ato_target)
-
-    result = (target.divide(no_target)).dropna()
-
-    return result
-
-
 def fig_32b7(data, columns=5):
     genes = genes_sorted(data)
     cells = data[(data['cy'] >= -10) & (data['cy'] <= 10)]
@@ -487,95 +463,66 @@ def fig_32b7(data, columns=5):
     return fig
 
 
-def dtw_distance(d1, d2, word=5):
-    s1 = d1.values
-    s2 = d2.values
-    dwt = {}
-    word = max(word, abs(len(s1) - len(s2)))
-    for i in range(-1, len(s1)):
-        for j in range(-1, len(s2)):
-            dwt[(i, j)] = float('inf')
-    dwt[(-1, -1)] = 0
-    for i in range(len(s1)):
-        for j in range(max(0, i - word), min(len(s2), i + word)):
-            dist = (s1[i]-s2[j])**2
-            dwt[(i, j)] = dist + min(dwt[(i-1, j)], dwt[(i, j-1)], dwt[(i-1, j-1)])
-
-    return math.sqrt(dwt[len(s1)-1, len(s2)-1])
-
-
-def pd_distance(d1, d2, factor=1, normalize=False):
-    s1 = d1 / d1.mean() if normalize else d1
-    s2 = d2 / d2.mean() if normalize else d2
-
-    distances = s1.subtract(s2).abs().dropna()
-    indices = distances.index.values
-    factors = np.power(factor, np.abs(indices))
-    distance = np.sum(distances.values * factors) / len(indices)
-
-    return distance
-
-
-def distance_matrix(data, dfun=dtw_distance, *args, **kwargs):
-    matrix = np.full((len(data), len(data)), float('inf'))
-
-    for i in range(0, len(data)):
-        a = data[i]
-        for j in range(0, i + 1):
-            b = data[j]
-            matrix[i, j] = dfun(a, b, **kwargs)
-
-    for j in range(0, len(data)):
-        for i in range(0, j + 1):
-            matrix[i, j] = matrix[j, i]
-
-    return matrix
-
-
-def power_matrices(matrices, exponents):
-    result = []
-    for index, matrix in enumerate(matrices):
-        result.append(np.power(matrix, exponents[index]))
-    return result
-
-
-def smoothen(data, window, rank):
-    index = data.index
-    values = savgol_filter(data.values, window, rank, mode='nearest')
-    return pd.DataFrame(values, index)
-
-
 def fig_01a8(data):
+    """
+    Cluster genes based on the amount of regulation by Atonal
+
+    :param data: Input data
+    :return: The dendrogram figure
+    """
+    def distance_matrix(data):
+        matrix = np.full((data.size, data.size), float('inf'))
+
+        for i in range(0, data.size):
+            a = data[i]
+            for j in range(0, i + 1):
+                b = data[j]
+                matrix[i, j] = abs(a - b)
+
+        for j in range(0, data.size):
+            for i in range(0, j + 1):
+                matrix[i, j] = matrix[j, i]
+
+        return matrix
+
     genes = genes_sorted(data)
-    cells = data[(data['cy'] >= -10) & (data['cy'] <= 10)]
+    cells = data[(data['cy'] > -10) & (data['cy'] < 10)]
     background = data[(data['cy'] >= -10) & (data['cy'] <= -5)]
     ato_cells = cells[(cells['mCherry'] > background['mCherry'].quantile(0.90))]
     no_ato_cells = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
-
-    target_profiles = []
-    no_target_profiles = []
-    diff_profiles = []
+    areas = pd.DataFrame(data={'area': np.zeros(len(genes))}, index=genes)
+    fig = plt.figure()
 
     for index, gene in enumerate(genes):
         ato_gene_cells = ato_cells[ato_cells['Gene'] == gene]
         no_ato_gene_cells = no_ato_cells[no_ato_cells['Gene'] == gene]
-        target = smoothen(y_profile(ato_gene_cells, 'Venus').mean(), 9, 3)
-        no_target = smoothen(y_profile(no_ato_gene_cells, 'Venus').mean(), 9, 3)
-        target_profiles.append(target)
-        no_target_profiles.append(no_target)
-        diff_profiles.append((target / no_target).dropna())
+        profiles = pd.DataFrame()
+        profiles['ato'] = y_profile(ato_gene_cells, 'Venus').mean()
+        profiles['no_ato'] = y_profile(no_ato_gene_cells, 'Venus').mean()
+        profiles = profiles.dropna()
 
-    factor = 0.95
-    exponents = [2, 1, 0]
-    matrices = [distance_matrix(target_profiles, dfun=pd_distance, factor=factor, normalize=True),
-                distance_matrix(no_target_profiles, dfun=pd_distance, factor=factor, normalize=True),
-                distance_matrix(diff_profiles, dfun=pd_distance, factor=factor)]
-    matrix = np.power(np.product(np.stack(power_matrices(matrices, exponents)), axis=0), 1 / np.sum(exponents))
+        gradients = pd.DataFrame(index=profiles.index)
+        gradients['ato'] = np.gradient(savgol_filter(profiles['ato'].values, 9, 3, mode='nearest'))
+        gradients['no_ato'] = np.gradient(savgol_filter(profiles['no_ato'].values, 9, 3, mode='nearest'))
+
+        ax = fig.subplots()
+        gradients['ato_smooth'] = savgol_filter(gradients['ato'].values, 9, 3, mode='nearest')
+        gradients['no_ato_smooth'] = savgol_filter(gradients['no_ato'].values, 9, 3, mode='nearest')
+        polycol = ax.fill_between(gradients.index, gradients['ato_smooth'], gradients['no_ato_smooth'],
+                                  where=gradients['ato_smooth'] >= gradients['no_ato_smooth'], color='red',
+                                  interpolate=True)
+        area = 0
+        for path in polycol.get_paths():
+            polygon = Polygon(path.vertices)
+            area = area + polygon.area
+        areas.loc[[gene], 'area'] = area
+    fig.clear()
+
+    matrix = distance_matrix(areas.values)
     distances = squareform(matrix)
     linkage_matrix = linkage(distances, "single")
-    fig = plt.figure()
     ax = fig.add_subplot(111)
-    dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90)
+    dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90, color_threshold=0.17)
     return fig
 
 
@@ -584,7 +531,6 @@ def fig_93ea(data, columns=5):
     rows = math.ceil(len(genes) / columns)
     fig = plt.figure(figsize=(15, rows * 3))
     gs = gridspec.GridSpec(rows, columns)
-    ato = y_profile(data[data['Gene'].isin(clean)], 'mCherry')
 
     for index, gene in enumerate(genes):
         row = math.ceil((index + 1) / columns)
@@ -657,32 +603,116 @@ def fig_d3a8(data, columns=5):
     return fig
 
 
-fig = fig_3d51(input)
-fig.show()
-if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_3d51.png'))
+def fig_ceb2(data, columns=5):
 
-fig = fig_79eb(input, 2)
-fig.show()
-if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_79eb.png'))
+    def pd_distance(d1, d2, factor=1, normalize=False):
+        s1 = d1 / d1.mean() if normalize else d1
+        s2 = d2 / d2.mean() if normalize else d2
 
-fig = fig_32b7(input)
-fig.show()
-if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_32b7.png'))
+        distances = s1.subtract(s2).abs().dropna()
+        indices = distances.index.values
+        factors = np.power(factor, np.abs(indices))
+        distance = np.sum(distances.values * factors) / len(indices)
 
-fig = fig_93ea(input)
-fig.show()
-if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_93ea.png'))
+        return distance
 
-fig = fig_01a8(input)
-fig.show()
-if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_01a8.png'))
+    def distance_matrix(data):
+        matrix = np.full((len(data), len(data)), float('inf'))
 
-fig = fig_d3a8(input)
+        for i in range(0, len(data)):
+            a = data[i]
+            for j in range(0, i + 1):
+                b = data[j]
+                matrix[i, j] = pd_distance(a, b)
+
+        for j in range(0, len(data)):
+            for i in range(0, j + 1):
+                matrix[i, j] = matrix[j, i]
+
+        return matrix
+
+    genes = genes_sorted(data)
+    cells = data[(data['cy'] > -10) & (data['cy'] < 10)]
+    background = data[(data['cy'] >= -10) & (data['cy'] <= -5)]
+    ato_cells = cells[(cells['mCherry'] > background['mCherry'].quantile(0.90))]
+    no_ato_cells = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
+    gene_profiles = []
+
+    # rows = math.ceil(len(genes) / columns)
+    # fig = plt.figure(figsize=(15, rows * 3))
+    # gs = gridspec.GridSpec(rows, columns)
+    for index, gene in enumerate(genes):
+        ato_gene_cells = ato_cells[ato_cells['Gene'] == gene]
+        no_ato_gene_cells = no_ato_cells[no_ato_cells['Gene'] == gene]
+        profiles = pd.DataFrame()
+        profiles['ato'] = y_profile(ato_gene_cells, 'Venus').mean()
+        profiles['no_ato'] = y_profile(no_ato_gene_cells, 'Venus').mean()
+        profiles = profiles.dropna()
+
+        gradients = pd.DataFrame(index=profiles.index)
+        gradients['ato'] = np.gradient(savgol_filter(profiles['ato'].values, 9, 3, mode='nearest'))
+        gradients['no_ato'] = np.gradient(savgol_filter(profiles['no_ato'].values, 9, 3, mode='nearest'))
+
+        gradients['ato_smooth'] = savgol_filter(gradients['ato'].values, 9, 3, mode='nearest')
+        gradients['no_ato_smooth'] = savgol_filter(gradients['no_ato'].values, 9, 3, mode='nearest')
+        gradients['diff'] = gradients['ato_smooth'] - gradients['no_ato_smooth']
+        gradients.loc[gradients['diff'] < 0, 'diff'] = 0
+        gene_profiles.append(gradients['diff'])
+
+        # row = math.ceil((index + 1) / columns)
+        # ax = fig.add_subplot(gs[index])
+        # ax.plot(gradients['diff'].index, gradients['diff'].values)
+        # ax.set_xlim(-10, 10)
+        # ax.set_yscale('linear')
+        # ax.set_ylim(0, 0.6)
+        # ax.text(0.025, 0.95, gene, horizontalalignment='left', verticalalignment='top', fontsize=24,
+        #         transform=ax.transAxes)
+        # ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
+        #                left=True, right=False, labelleft=(index % 5 == 0), labelright=False)
+        # ax.tick_params(axis='y', which='minor', left=False, right=False, labelleft=False, labelright=False)
+    # fig.show()
+
+    matrix = distance_matrix(gene_profiles)
+    distances = squareform(matrix)
+    linkage_matrix = linkage(distances, "single")
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90)
+    return fig
+
+
+# fig = fig_3d51(input)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_3d51.png'))
+#
+# fig = fig_79eb(input, 2)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_79eb.png'))
+#
+# fig = fig_32b7(input)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_32b7.png'))
+#
+# fig = fig_93ea(input)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_93ea.png'))
+#
+#
+# fig = fig_01a8(input)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_01a8.png'))
+#
+# fig = fig_d3a8(input)
+# fig.show()
+# if args.outdir:
+#     fig.savefig(os.path.join(args.outdir, 'figure_d3a8.png'))
+
+fig = fig_ceb2(input)
 fig.show()
 if args.outdir:
-    fig.savefig(os.path.join(args.outdir, 'figure_d3a8.png'))
+     fig.savefig(os.path.join(args.outdir, 'figure_ceb2.png'))
