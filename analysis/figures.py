@@ -677,7 +677,7 @@ def fig_ceb2(data, columns=5):
     linkage_matrix = linkage(distances, "single")
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90)
+    dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90, color_threshold=0.01)
     return fig
 
 
