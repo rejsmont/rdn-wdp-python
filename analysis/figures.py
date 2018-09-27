@@ -239,6 +239,13 @@ def plot_profiles_2(ax, profiles, ticks, styles=None, preprocessors=None, axis='
 
 
 def fig_79eb(data, columns):
+    """
+    Plot target gene expression patterns and profiles
+
+    :param data:
+    :param columns:
+    :return:
+    """
     genes = genes_sorted(data)
     genes.remove('ato')
     rows = math.ceil(len(genes) / columns)
@@ -326,6 +333,12 @@ def fig_79eb(data, columns):
 
 
 def fig_3d51(data):
+    """
+    Plot Ato expression patterns and profiles
+
+    :param data:
+    :return:
+    """
     rows = 4
     fig = plt.figure(figsize=(12, rows * 3))
     width_ratios = [item for item in [4] * 3]
@@ -423,6 +436,13 @@ def fig_3d51(data):
 
 
 def fig_32b7(data, columns=5):
+    """
+    Plot profiles of target gene expression profiles around the MF in low / high ato-expression cells
+
+    :param data:
+    :param columns:
+    :return:
+    """
     genes = genes_sorted(data)
     cells = data[(data['cy'] >= -10) & (data['cy'] <= 10)]
     background = data[(data['cy'] >= -10) & (data['cy'] <= -5)]
@@ -527,6 +547,13 @@ def fig_01a8(data):
 
 
 def fig_93ea(data, columns=5):
+    """
+    Plot target gene expression around the MF from each sample
+
+    :param data:
+    :param columns:
+    :return:
+    """
     genes = genes_sorted(data)
     rows = math.ceil(len(genes) / columns)
     fig = plt.figure(figsize=(15, rows * 3))
@@ -552,6 +579,13 @@ def fig_93ea(data, columns=5):
 
 
 def fig_d3a8(data, columns=5):
+    """
+    Plot gradients of target gene expression around the MF in low / high ato-expression cells
+
+    :param data:
+    :param columns:
+    :return:
+    """
     genes = genes_sorted(data)
     cells = data[(data['cy'] > -10) & (data['cy'] < 10)]
     background = data[(data['cy'] >=-10) & (data['cy'] <= -5)]
@@ -603,7 +637,13 @@ def fig_d3a8(data, columns=5):
     return fig
 
 
-def fig_ceb2(data, columns=5):
+def fig_ceb2(data):
+    """
+    Cluster genes based on the expression profiles in ato+ and ato- cells
+
+    :param data: Input data
+    :return: The dendrogram figure
+    """
 
     def pd_distance(d1, d2, factor=1, normalize=False):
         s1 = d1 / d1.mean() if normalize else d1
@@ -638,9 +678,6 @@ def fig_ceb2(data, columns=5):
     no_ato_cells = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
     gene_profiles = []
 
-    # rows = math.ceil(len(genes) / columns)
-    # fig = plt.figure(figsize=(15, rows * 3))
-    # gs = gridspec.GridSpec(rows, columns)
     for index, gene in enumerate(genes):
         ato_gene_cells = ato_cells[ato_cells['Gene'] == gene]
         no_ato_gene_cells = no_ato_cells[no_ato_cells['Gene'] == gene]
@@ -659,25 +696,13 @@ def fig_ceb2(data, columns=5):
         gradients.loc[gradients['diff'] < 0, 'diff'] = 0
         gene_profiles.append(gradients['diff'])
 
-        # row = math.ceil((index + 1) / columns)
-        # ax = fig.add_subplot(gs[index])
-        # ax.plot(gradients['diff'].index, gradients['diff'].values)
-        # ax.set_xlim(-10, 10)
-        # ax.set_yscale('linear')
-        # ax.set_ylim(0, 0.6)
-        # ax.text(0.025, 0.95, gene, horizontalalignment='left', verticalalignment='top', fontsize=24,
-        #         transform=ax.transAxes)
-        # ax.tick_params(bottom=True, top=True, labelbottom=(row == rows), labeltop=(row == 1),
-        #                left=True, right=False, labelleft=(index % 5 == 0), labelright=False)
-        # ax.tick_params(axis='y', which='minor', left=False, right=False, labelleft=False, labelright=False)
-    # fig.show()
-
     matrix = distance_matrix(gene_profiles)
     distances = squareform(matrix)
     linkage_matrix = linkage(distances, "single")
     fig = plt.figure()
     ax = fig.add_subplot(111)
     dendrogram(linkage_matrix, labels=genes, ax=ax, leaf_rotation=90, color_threshold=0.01)
+
     return fig
 
 
@@ -711,8 +736,8 @@ def fig_ceb2(data, columns=5):
 # fig.show()
 # if args.outdir:
 #     fig.savefig(os.path.join(args.outdir, 'figure_d3a8.png'))
-
-fig = fig_ceb2(input)
-fig.show()
-if args.outdir:
-     fig.savefig(os.path.join(args.outdir, 'figure_ceb2.png'))
+#
+# fig = fig_ceb2(input)
+# fig.show()
+# if args.outdir:
+#      fig.savefig(os.path.join(args.outdir, 'figure_ceb2.png'))
