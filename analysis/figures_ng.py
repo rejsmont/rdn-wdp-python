@@ -34,117 +34,63 @@ class Figure:
 
     def __init__(self, data):
         self.data = data
+        self.fig = None
+        self.gs = None
+
+    def show(self):
+        self.fig.show()
+
+    def save(self, path):
+        self.fig.savefig(path)
 
 
 class Plot:
 
-
-    @staticmethod
-    def x_lim():
-        return False
-
-    @staticmethod
-    def y_lim():
-        return False
-
-    @staticmethod
-    def v_lim():
-        return False
-
-    @staticmethod
-    def x_scale():
-        return False
-
-    @staticmethod
-    def y_scale():
-        return False
-
-    @staticmethod
-    def v_scale():
-        return False
-
-    @staticmethod
-    def x_ticks():
-        return False
-
-    @staticmethod
-    def y_ticks():
-        return False
-
-    @staticmethod
-    def v_ticks():
-        return False
-
-
-class DiscThumb(Plot):
-    """
-    Plot a disc thumbnail
-    """
-    def __init__(self, fig, gs, data):
+    def __init__(self, fig, data):
         self.fig = fig
-        self.gs = gs
         self.data = data
         self.ax = None
-        self.img = None
-        self.index = self.data.index.to_frame()
-        self.extent = [self.index['cx'].min(), self.index['cx'].max(),
-                       self.index['cy'].min(), self.index['cy'].max()]
 
-    def plot(self, position, cmap=None):
-        self.ax = self.fig.add_subplot(self.gs[position])
-        self.img = self.ax.imshow(self.disc_matrix(), extent=self.extent, norm=self.norm(), cmap=cmap, aspect='auto')
-        self.ax.set_facecolor('black')
-        self.ax.set_xlim(self.x_lim())
-        self.ax.set_ylim(self.y_lim())
-        self.ax.xaxis.tick_top()
+    def plot(self, position, *args, **kwargs):
+        self.ax = self.fig.add_subplot(position)
 
-    def disc_matrix(self):
-        x = self.index['cx']
-        y = self.index['cy'] - self.extent[2]
-        v = self.data
-        matrix = np.full([self.extent[3] - self.extent[2] + 1, self.extent[1] - self.extent[0] + 1], np.NaN)
-        matrix[y, x] = v
-        raw = matrix.copy()
-        nan = np.argwhere(np.isnan(matrix))
-        x_max, y_max = matrix.shape
-        for x, y in nan:
-            xs = max([0, x-1])
-            xe = min([x+1, x_max-1])
-            ys = max([0, y - 1])
-            ye = min([y + 1, y_max-1])
-            kernel = raw[xs:xe, ys:ye]
-            kernel = kernel[~np.isnan(kernel)]
-            if kernel.size > 0:
-                matrix[x, y] = np.mean(kernel)
-        return matrix
-
-    def norm(self):
-        v_scale = self.v_scale()
-        v_lim = self.v_lim()
-        if v_lim is not False:
-            v_min, v_max = v_lim
-        else:
-            v_min = None
-            v_max = None
-        norm = None
-        if v_scale is False or v_scale == 'linear':
-            norm = colors.Normalize(vmin=v_min, vmax=v_max)
-        elif v_scale == 'log':
-            norm = colors.LogNorm(vmin=v_min, vmax=v_max)
-        else:
-            raise NotImplementedError("Override `norm` method to implement %s v_scale", v_scale)
-        return norm
+    def legend(self, position, *args, **kwargs):
+        pass
 
     @staticmethod
-    def x_lim():
-        return [GX_MIN, GX_MAX]
+    def x_lim(): return False
 
     @staticmethod
-    def y_lim():
-        return [GY_MIN, GY_MAX]
+    def y_lim(): return False
+
+    @staticmethod
+    def v_lim(): return False
+
+    @staticmethod
+    def x_scale(): return False
+
+    @staticmethod
+    def y_scale(): return False
+
+    @staticmethod
+    def v_scale(): return False
+
+    @staticmethod
+    def x_ticks(): return False
+
+    @staticmethod
+    def y_ticks(): return False
+
+    @staticmethod
+    def v_ticks(): return False
+
+    def v_axis_formatter(self): return False
 
 
-class GeneDiscThumb(DiscThumb):
+class LogScaleGenePlot:
+
+    @staticmethod
+    def cmap(): return 'plasma'
 
     @staticmethod
     def v_lim(): return [0.1, 30]
@@ -155,30 +101,44 @@ class GeneDiscThumb(DiscThumb):
     @staticmethod
     def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
 
+    @ticker.FuncFormatter
+    def major_formatter_log(x, pos):
+        return "%g" % (round(x * 10) / 10)
 
-class ExtDiscThumb(GeneDiscThumb):
+    def v_axis_formatter(self): return self.major_formatter_log
+
+
+class LogScaleExtPlot(LogScaleGenePlot):
+
+    @staticmethod
+    def cmap(): return 'viridis'
 
     @staticmethod
     def v_lim(): return [0.1, 20]
 
 
 class ProfilePlot(Plot):
+    """
+    Plot gene expression profile
+    """
 
-    def __init__(self, fig, gs, data):
-        self.fig = fig
-        self.gs = gs
-        self.data = data
-        self.ax = None
-
-    def plot(self, position):
-        self.ax = self.fig.add_subplot(self.gs[position])
+    def plot(self, position, *args, **kwargs):
+        super().plot(position, *args, **kwargs)
         self.plot_profiles()
         self.format_axis()
 
-    def plot_profile(self, data, preprocessor=None, style=None):
+    def legend(self, position, ncol=1, loc='upper center', *args, **kwargs):
+        ax = self.fig.add_subplot(position)
+        ax.set_axis_off()
+        handles, labels = self.ax.get_legend_handles_labels()
+        ax.legend(handles, labels, ncol=ncol, loc=loc, frameon=False, fontsize=18)
+
+    def plot_profile(self, profile, preprocessor=None, style=None):
+        data = self.data[profile]
         x = data.index
         y = preprocessor(data.values) if preprocessor else data.values
-        self.ax.plot(x, y, label=data, **style)
+        style = style if style is not None else {}
+        self.ax.plot(x, y, label=profile, **style)
 
     def plot_profiles(self):
         preprocessors = self.preprocessors()
@@ -198,6 +158,8 @@ class ProfilePlot(Plot):
             self.ax.set_yscale(self.v_scale())
         if self.v_ticks():
             self.ax.set_yticks(self.v_ticks())
+        if self.v_axis_formatter():
+            self.ax.yaxis.set_major_formatter(self.v_axis_formatter())
 
     @staticmethod
     def preprocessors():
@@ -224,6 +186,107 @@ class DVProfilePlot(ProfilePlot):
     @staticmethod
     def x_lim():
         return [GX_MIN, GX_MAX]
+
+
+class DiscThumb(Plot):
+    """
+    Plot a disc thumbnail
+    """
+    def __init__(self, fig, data, title):
+        super().__init__(fig, data)
+        self.img = None
+        self.index = self.data.index.to_frame()
+        self.extent = [self.index['cx'].min(), self.index['cx'].max(),
+                       self.index['cy'].max(), self.index['cy'].min()]
+        self.title = title
+
+    def plot(self, position, *args, **kwargs):
+        super().plot(position, color='white', *args, **kwargs)
+        matrix = self.disc_matrix()
+        self.img = self.ax.imshow(matrix, extent=self.extent, norm=self.norm(), cmap=self.cmap(), aspect='auto')
+        self.ax.set_facecolor('black')
+        self.ax.set_xlim(self.x_lim())
+        self.ax.set_ylim(self.y_lim())
+
+    def legend(self, position, *args, **kwargs):
+        ax = self.fig.add_subplot(position)
+        cb = self.fig.colorbar(self.img, cax=ax, orientation='horizontal', ticks=self.v_ticks(),
+                               format=self.v_axis_formatter())
+        cb.set_label(label=self.title, fontsize=18)
+
+    def disc_matrix(self):
+        x = self.index['cx']
+        y = self.index['cy'] - self.extent[3]
+        v = self.data
+        matrix = np.full([self.extent[2] - self.extent[3] + 1, self.extent[1] - self.extent[0] + 1], np.NaN)
+        matrix[y, x] = v
+        raw = matrix.copy()
+        nan = np.argwhere(np.isnan(matrix))
+        x_max, y_max = matrix.shape
+        for x, y in nan:
+            xs = max([0, x-1])
+            xe = min([x+1, x_max-1])
+            ys = max([0, y - 1])
+            ye = min([y + 1, y_max-1])
+            kernel = raw[xs:xe, ys:ye]
+            kernel = kernel[~np.isnan(kernel)]
+            if kernel.size > 0:
+                matrix[x, y] = np.mean(kernel)
+            else:
+                matrix[x, y] = 0
+        return matrix
+
+    def norm(self):
+        v_scale = self.v_scale()
+        v_lim = self.v_lim()
+        if v_lim is not False:
+            v_min, v_max = v_lim
+        else:
+            v_min = None
+            v_max = None
+        norm = None
+        if v_scale is False or v_scale == 'linear':
+            norm = colors.Normalize(vmin=v_min, vmax=v_max)
+        elif v_scale == 'log':
+            norm = colors.LogNorm(vmin=v_min, vmax=v_max)
+        else:
+            raise NotImplementedError("Override `norm` method to implement %s v_scale", v_scale)
+        return norm
+
+    @staticmethod
+    def x_lim(): return [GX_MIN, GX_MAX]
+
+    @staticmethod
+    def y_lim(): return [GY_MAX, GY_MIN]
+
+    @staticmethod
+    def cmap(): return None
+
+
+class LabeledPlot(Plot):
+
+    def plot(self, position, text=None, color='black', *args, **kwargs):
+        super().plot(position, *args, **kwargs)
+        self.ax.text(0.025, 0.95, text, horizontalalignment='left', verticalalignment='top', fontsize=24,
+                     color=color, transform=self.ax.transAxes)
+
+
+class MultiCellPlot(Plot):
+
+    def plot(self, position, firstrow=False, firstcol=True, lastrow=False, lastcol=False, controw=False,
+             label='left', *args, **kwargs):
+        super().plot(position, *args, **kwargs)
+        self.ax.tick_params(bottom=(lastrow or controw),
+                            top=((firstrow and not lastrow) or controw),
+                            labelbottom=lastrow,
+                            labeltop=(firstrow and not lastrow),
+                            left=(label == 'left'),
+                            right=(label == 'right'),
+                            labelleft=(firstcol and (label == 'left')),
+                            labelright=(lastcol and (label == 'right')))
+        if self.v_scale() == 'log':
+            self.ax.tick_params(axis='y', which='minor', left=(label == 'left'), right=(label == 'right'),
+                                labelleft=False, labelright=False)
 
 
 class DiscData:
@@ -310,7 +373,7 @@ class DiscData:
         return self._matrices
 
     @staticmethod
-    def q99(x): return np.percentile(x, 0.99)
+    def q99(x): return np.percentile(x, 99)
 
     def _profiles_matrices(self):
         profiles = []
@@ -348,12 +411,19 @@ class DiscData:
         self._matrices = pd.concat(matrices)
 
 
-class Figure_79eb:
+class Figure_79eb(Figure):
+
+    class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, APProfilePlot, LabeledPlot):
+        pass
+
+    class GeneDiscThumb(MultiCellPlot, LogScaleGenePlot, DiscThumb, LabeledPlot):
+        pass
+
+    class ExtDiscThumb(MultiCellPlot, LogScaleExtPlot, DiscThumb, LabeledPlot):
+        pass
 
     def __init__(self, data, columns=2):
-        self.data = data
-        self.fig = None
-        self.gs = None
+        super().__init__(data)
         self.columns = columns
         self.genes = self.data.genes_sorted()
         self.genes.remove('ato')
@@ -361,10 +431,8 @@ class Figure_79eb:
 
     def geom(self):
         self.fig = plt.figure(figsize=(32, self.rows * 2.65))
-        width_ratios = [item for sub in [[1], [16] * 4] * self.columns for item in sub]
-        height_ratios = [item for sub in [[8] * self.rows, [1]] for item in sub]
-        self.gs = gridspec.GridSpec(self.rows + 1, 5 * self.columns,
-                                    width_ratios=width_ratios, height_ratios=height_ratios)
+        e = 1 if (len(self.genes) % self.columns == 0) else 0
+        self.gs = gridspec.GridSpec(self.rows + e, self.columns)
 
     def plot(self):
         self.geom()
@@ -373,15 +441,46 @@ class Figure_79eb:
         template = pd.DataFrame()
         template['Target mean'] = np.NaN
         template['Target Q99'] = np.NaN
-        template['Ato protein'] = profiles.loc['Ato']['mean']
-        for gene in self.genes:
+        template['Ato protein'] = profiles.loc['AtoClean']['mean']
+        n_genes = len(self.genes)
+
+        def symbol(i):
+            if n_genes <= 26:
+                return chr(ord('A') + i)
+            else:
+                m = math.floor(index / 26)
+                return chr(ord('A') + m) + chr(ord('A') + (i - (26 * m)))
+
+        plots = []
+        index = 0
+        for index, gene in enumerate(self.genes):
             profile = profiles.loc[gene]
             matrix = matrices.loc[gene]
             gene_profiles = template.copy()
             gene_profiles['Target mean'] = profile['mean']
             gene_profiles['Target Q99'] = profile['q99']
-            plots = [GeneDiscThumb(self.fig, self.gs, matrix['mean']), GeneDiscThumb(self.fig, self.gs, matrix['max']),
-                     ExtDiscThumb(self.fig, self.gs, matrix['ext']), ProfilePlot(self.fig, self.gs, gene_profiles)]
+            ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index], width_ratios=[1, 20])
+            igs = gridspec.GridSpecFromSubplotSpec(1, 4, subplot_spec=ogs[1])
+            plots = [self.GeneDiscThumb(self.fig, matrix['mean'], 'Mean target expression'),
+                     self.GeneDiscThumb(self.fig, matrix['max'], 'Max target expression'),
+                     self.ExtDiscThumb(self.fig, matrix['ext'], 'Max target eccentricity'),
+                     self.GeneProfilePlot(self.fig, gene_profiles)]
+
+            ax = self.fig.add_subplot(ogs[0])
+            ax.set_axis_off()
+            ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
+            letter = symbol(index)
+            for pid, plot in enumerate(plots):
+                text = letter + '\'' * pid
+                plot.plot(igs[pid], text=text, label=('right' if pid == 3 else 'left'),
+                          firstcol=(pid == 0), firstrow=(index < self.columns),
+                          lastcol=(pid == 3), lastrow=(index >= n_genes-self.columns), controw=True)
+
+        ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index + 1], width_ratios=[1, 20])
+        igs = gridspec.GridSpecFromSubplotSpec(2, 4, subplot_spec=ogs[1], height_ratios=[1, 4])
+        for pid, plot in enumerate(plots):
+            pos = igs[pid] if pid < 3 else igs[:, -1]
+            plot.legend(pos)
 
 
 parser = argparse.ArgumentParser(description='Plot all data.')
@@ -400,3 +499,4 @@ print(pd.__version__)
 data = DiscData(args)
 fig_76eb = Figure_79eb(data)
 fig_76eb.plot()
+fig_76eb.show()
