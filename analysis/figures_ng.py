@@ -16,10 +16,18 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from multiprocessing import cpu_count, Pool
 import random
 from scipy.cluster.hierarchy import dendrogram, linkage
-from scipy.signal import savgol_filter
+from scipy.cluster.hierarchy import cophenet
+from scipy.cluster.hierarchy import fcluster
+from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
+from scipy.signal import savgol_filter
+from scipy import stats
 import scipy.optimize
 from shapely.geometry import Polygon
+import seaborn as sns
+from sklearn import preprocessing
+import multiprocessing
+import operator
 
 
 GX_MIN = 0
@@ -36,12 +44,21 @@ class Figure:
         self.data = data
         self.fig = None
         self.gs = None
+        self.plotted = False
 
     def show(self):
+        if not self.plotted:
+            self.plot()
         self.fig.show()
 
     def save(self, path):
+        if not self.plotted:
+            self.plot()
         self.fig.savefig(path)
+
+    def plot(self):
+        self.plotted = True
+        pass
 
 
 class Plot:
@@ -84,6 +101,9 @@ class Plot:
     @staticmethod
     def v_ticks(): return False
 
+    @staticmethod
+    def v_minor_ticks(): return False
+
     def v_axis_formatter(self): return False
 
 
@@ -101,6 +121,9 @@ class LogScaleGenePlot:
     @staticmethod
     def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
 
+    @staticmethod
+    def v_minor_ticks(): return [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30]
+
     @ticker.FuncFormatter
     def major_formatter_log(x, pos):
         return "%g" % (round(x * 10) / 10)
@@ -116,11 +139,18 @@ class LogScaleExtPlot(LogScaleGenePlot):
     @staticmethod
     def v_lim(): return [0.1, 20]
 
+    @staticmethod
+    def v_minor_ticks(): return [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20]
+
 
 class ProfilePlot(Plot):
     """
     Plot gene expression profile
     """
+
+    def __init__(self, fig, data, styles=None):
+        super().__init__(fig, data)
+        self._styles = styles if styles is not None else False
 
     def plot(self, position, *args, **kwargs):
         super().plot(position, *args, **kwargs)
@@ -133,20 +163,18 @@ class ProfilePlot(Plot):
         handles, labels = self.ax.get_legend_handles_labels()
         ax.legend(handles, labels, ncol=ncol, loc=loc, frameon=False, fontsize=18)
 
-    def plot_profile(self, profile, preprocessor=None, style=None):
+    def plot_profile(self, profile, style=None):
         data = self.data[profile]
         x = data.index
-        y = preprocessor(data.values) if preprocessor else data.values
+        y = self.preprocessor(data.values)
         style = style if style is not None else {}
         self.ax.plot(x, y, label=profile, **style)
 
     def plot_profiles(self):
-        preprocessors = self.preprocessors()
         styles = self.styles()
         for profile in self.data:
-            preprocessor = preprocessors[profile] if preprocessors and preprocessors[profile] else None
             style = styles[profile] if styles and styles[profile] else None
-            self.plot_profile(profile, preprocessor=preprocessor, style=style)
+            self.plot_profile(profile, style=style)
         return self.ax.get_legend_handles_labels()
 
     def format_axis(self):
@@ -162,12 +190,11 @@ class ProfilePlot(Plot):
             self.ax.yaxis.set_major_formatter(self.v_axis_formatter())
 
     @staticmethod
-    def preprocessors():
-        return False
+    def preprocessor(x):
+        return x
 
-    @staticmethod
-    def styles():
-        return False
+    def styles(self):
+        return self._styles
 
 
 class APProfilePlot(ProfilePlot):
@@ -186,6 +213,12 @@ class DVProfilePlot(ProfilePlot):
     @staticmethod
     def x_lim():
         return [GX_MIN, GX_MAX]
+
+
+class SmoothProfilePlot(ProfilePlot):
+    @staticmethod
+    def preprocessor(x):
+        return savgol_filter(x, 9, 3, mode='nearest')
 
 
 class DiscThumb(Plot):
@@ -213,6 +246,9 @@ class DiscThumb(Plot):
         cb = self.fig.colorbar(self.img, cax=ax, orientation='horizontal', ticks=self.v_ticks(),
                                format=self.v_axis_formatter())
         cb.set_label(label=self.title, fontsize=18)
+        if self.v_scale() == 'log' and self.v_minor_ticks():
+            ticks = self.img.norm(self.v_minor_ticks())
+            cb.ax.xaxis.set_ticks(ticks, minor=True)
 
     def disc_matrix(self):
         x = self.index['cx']
@@ -300,6 +336,7 @@ class DiscData:
         self._genes = None
         self._genes_sorted = None
         self._profiles = None
+        self._dv_profiles = None
         self._matrices = None
         self.clean_up()
 
@@ -367,6 +404,11 @@ class DiscData:
             self._profiles_matrices()
         return self._profiles
 
+    def dv_profiles(self):
+        if self._dv_profiles is None:
+            self._profiles_matrices()
+        return self._dv_profiles
+
     def matrices(self):
         if self._matrices is None:
             self._profiles_matrices()
@@ -377,10 +419,13 @@ class DiscData:
 
     def _profiles_matrices(self):
         profiles = []
+        dv_profiles = []
         matrices = []
 
         cells = self.cells()
+        cells_mf = cells[(cells['cy'] >= -3) & (cells['cy'] <= 3)]
         cells_clean = self.cells_clean()
+        cells_mf_clean = cells_clean[(cells_clean['cy'] >= -3) & (cells_clean['cy'] <= 3)]
 
         cx = cells_clean['cx'].round().astype('int')
         cy = cells_clean['cy'].round().astype('int')
@@ -390,6 +435,9 @@ class DiscData:
             {'mCherry': [np.mean, np.max], 'ext_mCherry': np.max})
         matrix.columns = ['mean', 'max', 'ext']
         matrices.append(pd.concat([matrix], keys=['AtoClean'], names=['Gene']))
+        cx = cells_mf_clean['cx'].round().astype('int')
+        profile = cells_mf_clean.groupby(cx)['mCherry'].agg([np.mean, self.q99])
+        dv_profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
 
         cx = cells['cx'].round().astype('int')
         cy = cells['cy'].round().astype('int')
@@ -402,18 +450,29 @@ class DiscData:
 
         profile = cells.groupby(['Gene', cy])['Venus'].agg([np.mean, self.q99])
         profiles.append(profile)
+
         matrix = cells.groupby(['Gene', cx, cy])['Venus', 'ext_Venus'].agg(
             {'Venus': [np.mean, np.max], 'ext_Venus': np.max})
         matrix.columns = ['mean', 'max', 'ext']
         matrices.append(matrix)
 
+        cx = cells_mf['cx'].round().astype('int')
+        profile = cells_mf.groupby(cx)['mCherry'].agg([np.mean, self.q99])
+        dv_profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
+        profile = cells_mf.groupby(['Gene', cx])['Venus'].agg([np.mean, self.q99])
+        dv_profiles.append(profile)
+
         self._profiles = pd.concat(profiles)
+        self._dv_profiles = pd.concat(dv_profiles)
         self._matrices = pd.concat(matrices)
 
 
-class Figure_79eb(Figure):
+class Figure_3d51(Figure):
 
-    class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, APProfilePlot, LabeledPlot):
+    class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, SmoothProfilePlot, APProfilePlot, LabeledPlot):
+        pass
+
+    class DVGeneProfilePlot(MultiCellPlot, LogScaleGenePlot, SmoothProfilePlot, DVProfilePlot, LabeledPlot):
         pass
 
     class GeneDiscThumb(MultiCellPlot, LogScaleGenePlot, DiscThumb, LabeledPlot):
@@ -422,6 +481,87 @@ class Figure_79eb(Figure):
     class ExtDiscThumb(MultiCellPlot, LogScaleExtPlot, DiscThumb, LabeledPlot):
         pass
 
+    def __init__(self, data):
+        super().__init__(data)
+
+    def plot(self):
+        self.fig = plt.figure(figsize=(15, 5 * 2.67))
+        self.gs = gridspec.GridSpec(2, 1, height_ratios=[25, 9])
+        #self.gs = gridspec.GridSpec(6, 3, height_ratios=[2, 2, 2, 1, 2, 1])
+        matrices = self.data.matrices()
+
+        rows = 3
+        columns = 3
+        height_ratios = [item for sub in [[8] * rows, [1]] for item in sub]
+        ogs = gridspec.GridSpecFromSubplotSpec(rows, columns, subplot_spec=self.gs[0], height_ratios=height_ratios)
+        thumbs = []
+        pos = 0
+        for row, gene in enumerate(['Ato', 'AtoClean', 'ato']):
+            matrix = matrices.loc[gene]
+            thumbs = [self.GeneDiscThumb(self.fig, matrix['mean'], 'Mean expression'),
+                      self.GeneDiscThumb(self.fig, matrix['max'], 'Max expression'),
+                      self.ExtDiscThumb(self.fig, matrix['ext'], 'Max eccentricity')]
+            for col, thumb in enumerate(thumbs):
+                pos = (row * 3) + col
+                text = chr(ord('A') + pos)
+                thumb.plot(ogs[pos], text=text, controw=True,
+                           firstcol=(col == 0), firstrow=(row == 0),
+                           lastcol=(col == columns-1), lastrow=(row == rows-1))
+
+        for col, thumb in enumerate(thumbs):
+            thumb.legend(ogs[pos + col + 1])
+
+        profiles = self.data.profiles()
+        plots = []
+        ato_protein = pd.DataFrame()
+        ato_protein['Protein Mean'] = profiles.loc['Ato']['mean']
+        ato_protein['Protein Q99'] = profiles.loc['Ato']['q99']
+        ato_protein['Protein (clean) mean'] = profiles.loc['AtoClean']['mean']
+        ato_protein['Protein (clean) Q99'] = profiles.loc['AtoClean']['q99']
+        styles = {
+            'Protein Mean': {'linestyle': 'dotted', 'color': '#2ca02c'},
+            'Protein Q99': {'linestyle': 'dotted', 'color': '#d62728'},
+            'Protein (clean) mean': {'color': '#2ca02c'},
+            'Protein (clean) Q99': {'color': '#d62728'}
+        }
+        plots.append(self.GeneProfilePlot(self.fig, ato_protein, styles=styles))
+        ato_reporter = pd.DataFrame()
+        ato_reporter['Reporter mean'] = profiles.loc['ato']['mean']
+        ato_reporter['Reporter Q99'] = profiles.loc['ato']['q99']
+        ato_reporter['Protein (clean) mean'] = profiles.loc['AtoClean']['mean']
+        plots.append(self.GeneProfilePlot(self.fig, ato_reporter))
+
+        dv_profiles = self.data.dv_profiles()
+        ato_dv = pd.DataFrame()
+        ato_dv['Reporter mean'] = dv_profiles.loc['ato']['mean']
+        ato_dv['Reporter Q99'] = dv_profiles.loc['ato']['q99']
+        ato_dv['Protein (clean) mean'] = dv_profiles.loc['AtoClean']['mean']
+        plots.append(self.DVGeneProfilePlot(self.fig, ato_dv))
+
+        ogs = gridspec.GridSpecFromSubplotSpec(1, columns, subplot_spec=self.gs[2])
+
+        def build_handles_labels(h, l, legend):
+            new_h, new_l = legend
+            for i, label in enumerate(new_l):
+                if label not in l:
+                    h.append(new_h[i])
+                    l.append(new_l[i])
+
+        handles = []
+        labels = []
+        for col, plot in enumerate(plots):
+            text = chr(ord('A') + pos + col + 1)
+            plot.plot(ogs[col], text=text, firstrow=False, lastrow=True)
+            build_handles_labels(handles, labels, plot.ax.get_legend_handles_labels())
+
+        ax = self.fig.add_subplot(self.gs[3])
+        ax.set_axis_off()
+        ax.legend(handles, labels, ncol=3, loc='center', frameon=False, fontsize=18)
+        super().plot()
+
+
+class Figure_79eb(Figure_3d51):
+
     def __init__(self, data, columns=2):
         super().__init__(data)
         self.columns = columns
@@ -429,13 +569,12 @@ class Figure_79eb(Figure):
         self.genes.remove('ato')
         self.rows = math.ceil(len(self.genes) / self.columns)
 
-    def geom(self):
-        self.fig = plt.figure(figsize=(32, self.rows * 2.65))
-        e = 1 if (len(self.genes) % self.columns == 0) else 0
-        self.gs = gridspec.GridSpec(self.rows + e, self.columns)
-
     def plot(self):
-        self.geom()
+        e = 1 if (len(self.genes) % self.columns == 0) else 0
+        rows = self.rows + e
+        self.fig = plt.figure(figsize=(16 * self.columns, rows * 2.67))
+        self.gs = gridspec.GridSpec(rows, self.columns)
+
         profiles = self.data.profiles()
         matrices = self.data.matrices()
         template = pd.DataFrame()
@@ -481,6 +620,128 @@ class Figure_79eb(Figure):
         for pid, plot in enumerate(plots):
             pos = igs[pid] if pid < 3 else igs[:, -1]
             plot.legend(pos)
+        Figure.plot(self)
+
+
+class Figure_9a76(Figure):
+
+    def __init__(self, data, gene='all', sample='all', method='complete', k=5, p=3.25):
+        super().__init__(data)
+        cells = self.data.cells_clean().dropna()
+        cells = cells[(cells['cy'] >= -10) & (cells['cy'] <= 10)]
+        if gene != 'all':
+            cells = cells[cells['Gene'] == gene]
+        if sample != 'all':
+            cells = cells[cells['Sample'] == sample]
+        self.cells = cells
+        self.gene = gene
+        self.sample = sample
+        self.method = method
+        self.k = k
+        self.p = p
+
+    def compute(self):
+        pass
+
+    def plot(self):
+
+        def sorted_legend(handles, labels=None):
+            if labels is None:
+                handles, labels = handles
+            hl = sorted(zip(handles, labels), key=operator.itemgetter(1))
+            handles2, labels2 = zip(*hl)
+            labels3 = [l.replace(' 0', ' ') for l in labels2]
+            return handles2, labels3
+
+        x = stats.zscore(self.cells[['cy', 'mCherry', 'ext_mCherry']].values, axis=0)
+
+        fig = plt.figure(figsize=[10, 10])
+        ax = fig.add_subplot(2, 2, 1)
+
+        # Cophenetic Correlation Coefficient
+        # single        0.6151533846171713
+        # complete      0.658116073716809
+        # average       0.7925722498155269
+        # weighted      0.671872242956842
+        # centroid      0.8076145946224655
+        # median        0.6922364609628868
+        # ward          0.5678365002555245
+        z = linkage(x, self.method)
+        k = self.k
+        p = self.p
+
+        #cluster = sns.clustermap(x, row_cluster=True, col_cluster=False, row_linkage=z)
+        #cluster.savefig('/Users/radoslaw.ejsmont/Desktop/xdxd/' + self.method + '_map.png')
+        #cluster.fig.show()
+
+        # clusters = fcluster(z, p, criterion='distance')
+        cells = self.cells.copy()
+        cells['cluster'] = fcluster(z, k, criterion='maxclust')
+        cells = cells.loc[cells.groupby('cluster')['cluster'].transform('count').sort_values(ascending=False).index]
+
+        clusters = cells['cluster'].unique()
+
+        ax_xi = fig.add_subplot(2, 2, 2)
+        ax_xy = fig.add_subplot(2, 2, 4)
+        c_colors = plt.cm.get_cmap("gist_rainbow", len(clusters))
+
+        dd = dendrogram(
+            z,
+            truncate_mode='lastp',   # show only the last p merged clusters
+            p=k,                     # show only the last p merged clusters
+            leaf_rotation=90.,       # rotates the x axis labels
+            leaf_font_size=8,        # font size for the x axis labels
+            show_contracted=True,    # to get a distribution impression in truncated branches
+            # max_d=p,                 # plot distance cutoff line
+            ax=ax,
+            link_color_func=lambda c: 'black'
+        )
+        ax.set_xticklabels(['Cluster %d' % c for c in range(1, len(ax.get_xmajorticklabels()) + 1)])
+        x_lbls = ax.get_xmajorticklabels()
+        num = -1
+        for lbl in x_lbls:
+            num += 1
+            lbl.set_color(c_colors(num))
+
+        for cluster in clusters:
+            c_cells = cells[cells['cluster'] == cluster]
+            c_count = c_cells['cluster'].count()
+            label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
+            ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
+            ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
+
+        handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
+        ax = fig.add_subplot(2, 2, 3)
+        ax.set_axis_off()
+        ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
+
+        fig.savefig('/Users/radoslaw.ejsmont/Desktop/xdxd/' + self.gene + '_' + self.sample + '_' +
+                    self.method + '_' + str(self.k) + '.png')
+
+        if self.sample == 'all':
+            samples = cells['Sample'].unique().tolist()
+            print(samples)
+            for sample in samples:
+                fig = plt.figure(figsize=[10, 10])
+                ax_xyi = fig.add_subplot(2, 2, 1)
+                ax_xi = fig.add_subplot(2, 2, 4)
+                ax_xy = fig.add_subplot(2, 2, 2)
+                s_cells = cells[cells['Sample'] == sample].sort_values('mCherry')
+                ax_xyi.scatter(s_cells['cx'], s_cells['cy'], c=s_cells['mCherry'])
+                for cluster in clusters:
+                    c_cells = s_cells[s_cells['cluster'] == cluster]
+                    c_count = c_cells['cluster'].count()
+                    label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
+                    ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
+                    ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
+                handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
+                ax = fig.add_subplot(2, 2, 3)
+                ax.set_axis_off()
+                ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
+                fig.savefig('/Users/radoslaw.ejsmont/Desktop/xdxd/' + self.gene + '_' + self.sample + '_' +
+                            self.method + '_' + str(self.k) + '_' + sample + '.png')
+
+        #fig.show()
 
 
 parser = argparse.ArgumentParser(description='Plot all data.')
@@ -494,9 +755,38 @@ if args.log:
     logging.getLogger('PIL.Image').setLevel(logging.INFO)
     logging.getLogger('matplotlib').setLevel(logging.INFO)
 
-print(pd.__version__)
-
 data = DiscData(args)
-fig_76eb = Figure_79eb(data)
-fig_76eb.plot()
-fig_76eb.show()
+#fig_3d51 = Figure_3d51(data)
+#fig_3d51.show()
+#fig_76eb = Figure_79eb(data)
+#fig_76eb.show()
+
+multiopt = [
+#    'single',
+    'complete',
+#    'average',
+    'weighted',
+#    'centroid',
+#    'median',
+    'ward',
+]
+
+# gene = 'lola-P'
+# gene = 'beat-IIIc'
+gene = 'Fas2'
+
+def run_process(method):
+    figure = Figure_9a76(data, gene=gene, sample='all', method=method, k=5)
+    try:
+        figure.plot()
+    except Exception as e:
+        print("Plotting " + figure.method + " failed: " + str(e))
+
+
+if __name__ == '__main__':
+    with Pool(2) as p:
+        p.map(run_process, multiopt)
+
+
+#fig_9a76 = Figure_9a76(data, gene='lola-P', sample='all', method='complete')
+#fig_9a76.plot()

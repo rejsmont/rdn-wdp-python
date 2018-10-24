@@ -22,7 +22,6 @@ import scipy.optimize
 from shapely.geometry import Polygon
 
 # Figure labels:
-# ceb2
 # 9a76
 # 5bd1
 # 37a5
