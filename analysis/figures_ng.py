@@ -56,7 +56,7 @@ class Figure:
             self.plot()
         self.fig.savefig(path)
 
-    def plot(self):
+    def plot(self, outdir):
         self.plotted = True
         pass
 
@@ -484,7 +484,7 @@ class Figure_3d51(Figure):
     def __init__(self, data):
         super().__init__(data)
 
-    def plot(self):
+    def plot(self, outdir):
         self.fig = plt.figure(figsize=(15, 5 * 2.67))
         self.gs = gridspec.GridSpec(2, 1, height_ratios=[25, 9])
         #self.gs = gridspec.GridSpec(6, 3, height_ratios=[2, 2, 2, 1, 2, 1])
@@ -569,7 +569,7 @@ class Figure_79eb(Figure_3d51):
         self.genes.remove('ato')
         self.rows = math.ceil(len(self.genes) / self.columns)
 
-    def plot(self):
+    def plot(self, outdir):
         e = 1 if (len(self.genes) % self.columns == 0) else 0
         rows = self.rows + e
         self.fig = plt.figure(figsize=(16 * self.columns, rows * 2.67))
@@ -643,7 +643,7 @@ class Figure_9a76(Figure):
     def compute(self):
         pass
 
-    def plot(self):
+    def plot(self, outdir):
 
         def sorted_legend(handles, labels=None):
             if labels is None:
@@ -715,8 +715,8 @@ class Figure_9a76(Figure):
         ax.set_axis_off()
         ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
 
-        fig.savefig('/Users/radoslaw.ejsmont/Desktop/xdxd/' + self.gene + '_' + self.sample + '_' +
-                    self.method + '_' + str(self.k) + '.png')
+        filename = self.gene + '_' + self.sample + '_' + self.method + '_' + str(self.k) + '.png'
+        fig.savefig(os.path.join(outdir, filename))
 
         if self.sample == 'all':
             samples = cells['Sample'].unique().tolist()
@@ -738,8 +738,8 @@ class Figure_9a76(Figure):
                 ax = fig.add_subplot(2, 2, 3)
                 ax.set_axis_off()
                 ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
-                fig.savefig('/Users/radoslaw.ejsmont/Desktop/xdxd/' + self.gene + '_' + self.sample + '_' +
-                            self.method + '_' + str(self.k) + '_' + sample + '.png')
+                filename = self.gene + '_' + self.sample + '_' + self.method + '_' + str(self.k) + '_' + sample + '.png'
+                fig.savefig(os.path.join(outdir, filename))
 
         #fig.show()
 
