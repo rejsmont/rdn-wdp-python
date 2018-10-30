@@ -28,7 +28,8 @@ import seaborn as sns
 from sklearn import preprocessing
 import multiprocessing
 import operator
-
+import hdbscan
+import hashlib
 
 GX_MIN = 0
 GX_MAX = 80
@@ -625,20 +626,25 @@ class Figure_79eb(Figure_3d51):
 
 class Figure_9a76(Figure):
 
-    def __init__(self, data, gene='all', sample='all', method='complete', k=5, p=3.25):
+    def __init__(self, data, method=None, metric='euclidean', k=5, n=5, r=1):
         super().__init__(data)
         cells = self.data.cells_clean().dropna()
         cells = cells[(cells['cy'] >= -10) & (cells['cy'] <= 10)]
-        if gene != 'all':
-            cells = cells[cells['Gene'] == gene]
-        if sample != 'all':
-            cells = cells[cells['Sample'] == sample]
         self.cells = cells
-        self.gene = gene
-        self.sample = sample
         self.method = method
+        self.metric = metric
         self.k = k
-        self.p = p
+        self.r = r
+        self.n = n
+        self.methods = [
+            'single',
+            'complete',
+            'average',
+            'weighted',
+            'centroid',
+            'median',
+            'ward',
+        ]
 
     def compute(self):
         pass
@@ -653,74 +659,114 @@ class Figure_9a76(Figure):
             labels3 = [l.replace(' 0', ' ') for l in labels2]
             return handles2, labels3
 
-        x = stats.zscore(self.cells[['cy', 'mCherry', 'ext_mCherry']].values, axis=0)
+        def h_cluster(x, data=None, method=None):
+            if data is None:
+                data = self.cells
+            if method is None:
+                method = self.method
+            # Cophenetic Correlation Coefficient
+            # single        0.6151533846171713
+            # complete      0.658116073716809
+            # average       0.7925722498155269
+            # weighted      0.671872242956842
+            # centroid      0.8076145946224655
+            # median        0.6922364609628868
+            # ward          0.5678365002555245
+            z = linkage(x, method)
+            k = self.k
 
-        fig = plt.figure(figsize=[10, 10])
-        ax = fig.add_subplot(2, 2, 1)
+            cells = data.copy()
+            cells['cluster'] = fcluster(z, k, criterion='maxclust')
+            return z, cells.loc[cells.groupby('cluster')['cluster'].transform('count').sort_values(ascending=False).index]
 
-        # Cophenetic Correlation Coefficient
-        # single        0.6151533846171713
-        # complete      0.658116073716809
-        # average       0.7925722498155269
-        # weighted      0.671872242956842
-        # centroid      0.8076145946224655
-        # median        0.6922364609628868
-        # ward          0.5678365002555245
-        z = linkage(x, self.method)
-        k = self.k
-        p = self.p
+        def h_cluster_dendrogram(z, ax, c_colors):
+            dd = dendrogram(
+                z,
+                truncate_mode='lastp',  # show only the last p merged clusters
+                p=self.k,               # show only the last p merged clusters
+                leaf_rotation=90.,      # rotates the x axis labels
+                leaf_font_size=8,       # font size for the x axis labels
+                show_contracted=True,   # to get a distribution impression in truncated branches
+                # max_d=p,              # plot distance cutoff line
+                ax=ax,
+                link_color_func=lambda c: 'black'
+            )
+            ax.set_xticklabels(['Cluster %d' % c for c in range(1, len(ax.get_xmajorticklabels()) + 1)])
+            x_lbls = ax.get_xmajorticklabels()
+            num = -1
+            for lbl in x_lbls:
+                num += 1
+                lbl.set_color(c_colors(num))
+            return dd
 
-        #cluster = sns.clustermap(x, row_cluster=True, col_cluster=False, row_linkage=z)
-        #cluster.savefig('/Users/radoslaw.ejsmont/Desktop/xdxd/' + self.method + '_map.png')
-        #cluster.fig.show()
+        def hdbscan_cluster(x, data=None):
+            if data is None:
+                data = self.cells
+            #clusterer = hdbscan.HDBSCAN(metric=self.metric, algorithm='best', min_cluster_size=200)
+            clusterer = hdbscan.HDBSCAN(metric=self.metric)
+            clusterer.fit(x)
+            labels = clusterer.labels_
+            cells = data.copy()
+            cells['cluster'] = labels + 2
+            return cells
 
-        # clusters = fcluster(z, p, criterion='distance')
-        cells = self.cells.copy()
-        cells['cluster'] = fcluster(z, k, criterion='maxclust')
-        cells = cells.loc[cells.groupby('cluster')['cluster'].transform('count').sort_values(ascending=False).index]
+        def get_samples(n, unique=False):
+            samples = self.cells[['Sample', 'Gene']].drop_duplicates().values.tolist()
+            selected = []
+            genes = []
+            while len(selected) < n:
+                if len(samples) == 0:
+                    break
+                index = np.random.randint(0, len(samples))
+                sample, gene = samples.pop(index)
+                if gene not in genes:
+                    genes.append(gene)
+                    selected.append(sample)
+                elif not unique:
+                    selected.append(sample)
 
-        clusters = cells['cluster'].unique()
+            return selected
 
-        ax_xi = fig.add_subplot(2, 2, 2)
-        ax_xy = fig.add_subplot(2, 2, 4)
-        c_colors = plt.cm.get_cmap("gist_rainbow", len(clusters))
+        def dataid(cells):
+            return hashlib.md5(str(cells['Sample'].unique().tolist()).encode()).hexdigest()
 
-        dd = dendrogram(
-            z,
-            truncate_mode='lastp',   # show only the last p merged clusters
-            p=k,                     # show only the last p merged clusters
-            leaf_rotation=90.,       # rotates the x axis labels
-            leaf_font_size=8,        # font size for the x axis labels
-            show_contracted=True,    # to get a distribution impression in truncated branches
-            # max_d=p,                 # plot distance cutoff line
-            ax=ax,
-            link_color_func=lambda c: 'black'
-        )
-        ax.set_xticklabels(['Cluster %d' % c for c in range(1, len(ax.get_xmajorticklabels()) + 1)])
-        x_lbls = ax.get_xmajorticklabels()
-        num = -1
-        for lbl in x_lbls:
-            num += 1
-            lbl.set_color(c_colors(num))
+        def cluster(data, method=None, id=None):
+            if method is None:
+                method = self.method
+            if id is None:
+                id = dataid(data)
 
-        for cluster in clusters:
-            c_cells = cells[cells['cluster'] == cluster]
-            c_count = c_cells['cluster'].count()
-            label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
-            ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
-            ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
+            fig = plt.figure(figsize=[10, 10])
+            ax = fig.add_subplot(2, 2, 1)
+            ax_xi = fig.add_subplot(2, 2, 2)
+            ax_xy = fig.add_subplot(2, 2, 4)
 
-        handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
-        ax = fig.add_subplot(2, 2, 3)
-        ax.set_axis_off()
-        ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
+            x = stats.zscore(data[['cy', 'mCherry', 'ext_mCherry']].values, axis=0)
+            # x = self.cells[['cy', 'mCherry', 'ext_mCherry']].values
+            z, cells = h_cluster(x, data, method)
+            clusters = cells.groupby('cluster')['cx'].count().sort_values(ascending=False).index.tolist()
+            c_colors = plt.cm.get_cmap("gist_rainbow", len(clusters))
+            h_cluster_dendrogram(z, ax, c_colors)
 
-        filename = self.gene + '_' + self.sample + '_' + self.method + '_' + str(self.k) + '.png'
-        fig.savefig(os.path.join(outdir, filename))
+            for cluster in clusters:
+                if cluster == 0:
+                    continue
+                c_cells = cells[cells['cluster'] == cluster]
+                c_count = c_cells['cluster'].count()
+                label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
+                ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
+                ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
 
-        if self.sample == 'all':
+            handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
+            ax = fig.add_subplot(2, 2, 3)
+            ax.set_axis_off()
+            ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
+
+            filename = id + '_' + method + '_' + str(self.k) + '.png'
+            fig.savefig(os.path.join(outdir, filename))
+            plt.close(fig)
+
             samples = cells['Sample'].unique().tolist()
-            print(samples)
             for sample in samples:
                 fig = plt.figure(figsize=[10, 10])
                 ax_xyi = fig.add_subplot(2, 2, 1)
@@ -738,10 +784,21 @@ class Figure_9a76(Figure):
                 ax = fig.add_subplot(2, 2, 3)
                 ax.set_axis_off()
                 ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
-                filename = self.gene + '_' + self.sample + '_' + self.method + '_' + str(self.k) + '_' + sample + '.png'
+                filename = id + '_' + method + '_' + str(self.k) + '_' + sample + '.png'
                 fig.savefig(os.path.join(outdir, filename))
+                plt.close(fig)
 
-        #fig.show()
+        for i in range(0, self.r):
+            samples = get_samples(self.n)
+            cells = self.cells[self.cells['Sample'].isin(samples)]
+            id = dataid(cells)
+            print(id, samples)
+            for method in self.methods:
+                print("Computing " + method)
+                try:
+                    cluster(cells, method, id)
+                except Exception as e:
+                    print("Computing " + method + " for dataset " + id + " failed: " + str(e))
 
 
 parser = argparse.ArgumentParser(description='Plot all data.')
@@ -754,6 +811,7 @@ if args.log:
     logging.basicConfig(level=args.log.upper())
     logging.getLogger('PIL.Image').setLevel(logging.INFO)
     logging.getLogger('matplotlib').setLevel(logging.INFO)
+    logging.getLogger('joblib').setLevel(logging.INFO)
 
 data = DiscData(args)
 #fig_3d51 = Figure_3d51(data)
@@ -761,32 +819,56 @@ data = DiscData(args)
 #fig_76eb = Figure_79eb(data)
 #fig_76eb.show()
 
-multiopt = [
-#    'single',
+methods = [
+    'single',
     'complete',
-#    'average',
+    'average',
     'weighted',
-#    'centroid',
-#    'median',
+    'centroid',
+    'median',
     'ward',
 ]
 
-# gene = 'lola-P'
-# gene = 'beat-IIIc'
-gene = 'Fas2'
+# multiopt = [
+#     'braycurtis',
+#     'canberra',
+#     'chebyshev',
+#     'cityblock',
+#     'dice',
+#     'euclidean',
+#     'hamming',
+#     # 'haversine', # Haversine distance only valid in 2 dimensions
+#     'infinity',
+#     'jaccard',
+#     'kulsinski',
+#     'l1',
+#     'l2',
+#      # 'mahalanobis', # Must provide either V or VI for Mahalanobis distance
+#     'manhattan',
+#     'matching',
+#     # 'minkowski', # Minkowski metric given but no p value supplied!
+#     'p',
+#     # 'pyfunc', # pyfunc failed: __init__() takes exactly 1 positional argument (0 given)
+#     'rogerstanimoto',
+#     'russellrao',
+#     'seuclidean', # seuclidean failed: __init__() takes exactly 1 positional argument (0 given)
+#     #'sokalmichener',
+#     #'sokalsneath',
+#     # 'wminkowski' # wminkowski failed: __init__() takes exactly 2 positional arguments (0 given)
+# ]
 
-def run_process(method):
-    figure = Figure_9a76(data, gene=gene, sample='all', method=method, k=5)
-    try:
-        figure.plot()
-    except Exception as e:
-        print("Plotting " + figure.method + " failed: " + str(e))
+# def run_process(option):
+#     figure = Figure_9a76(data, gene=gene, sample='all', method=option, k=7)
+#     try:
+#         figure.plot(args.outdir)
+#     except Exception as e:
+#         print("Plotting " + figure.metric + " failed: " + str(e))
+#
+#
+# if __name__ == '__main__':
+#     with Pool(2) as p:
+#         p.map(run_process, multiopt)
 
-
-if __name__ == '__main__':
-    with Pool(2) as p:
-        p.map(run_process, multiopt)
-
-
-#fig_9a76 = Figure_9a76(data, gene='lola-P', sample='all', method='complete')
-#fig_9a76.plot()
+np.random.seed(0)
+fig_9a76 = Figure_9a76(data, k=6, n=10, r=1)
+fig_9a76.plot(args.outdir)
