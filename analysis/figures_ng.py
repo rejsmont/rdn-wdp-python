@@ -9,7 +9,7 @@ import math
 import matplotlib
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
-#matplotlib.use('agg')
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
