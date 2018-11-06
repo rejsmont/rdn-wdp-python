@@ -8,7 +8,7 @@ import math
 import matplotlib
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
-matplotlib.use('agg')
+#matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from scipy.signal import savgol_filter

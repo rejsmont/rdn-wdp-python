@@ -7,7 +7,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('agg')
+#matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.cluster.hierarchy import fcluster
@@ -19,7 +19,7 @@ import hashlib
 
 class Clustering(Figure):
 
-    def __init__(self, data, method=None, metric='euclidean', k=6, n=5, r=1):
+    def __init__(self, data, method=None, metric='euclidean', k=6, n=5, r=3):
         super().__init__(data)
         self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
         self.method = method
@@ -28,16 +28,18 @@ class Clustering(Figure):
         self.r = r
         self.n = n
         self.methods = [
-            'single',
-            'complete',
-            'average',
-            'weighted',
-            'centroid',
-            'median',
+            # 'single',
+            # 'complete',
+            # 'average',
+            # 'weighted',
+            # 'centroid',
+            # 'median',
             'ward',
         ]
-        self.sample_sets = pd.DataFrame(columns=['Sample_{0}'.format(s) for s in range(0, self.n)])
-        self.centroids = pd.DataFrame(columns=['SampleSet', 'Cluster', 'cy', 'mCherry', 'ext_mCherry'])
+        index = pd.MultiIndex.from_product([[], []], names=['SampleSet', 'Method'])
+        self.sample_sets = pd.DataFrame(columns=['Sample_{0}'.format(s) for s in range(0, self.n)], index=index)
+        index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cluster'])
+        self.centroids = pd.DataFrame(columns=['cy', 'mCherry', 'ext_mCherry'])
 
     def compute(self):
         def h_cluster(x, method=None):
@@ -72,6 +74,9 @@ class Clustering(Figure):
             x = stats.zscore(cells.loc[filter, ['cy', 'mCherry', 'ext_mCherry']].values, axis=0)
             z = linkage(x, method)
             cells.loc[filter, method + '_' + id] = fcluster(z, self.k, criterion='maxclust')
+            index = pd.MultiIndex.from_product([[id], [method]], names=['SampleSet', 'Method'])
+            samples = pd.DataFrame([samples], index=index, columns=['Sample_{0}'.format(s) for s in range(0, self.n)])
+            self.sample_sets = self.sample_sets.append(samples)
             return z
 
         for i in range(0, self.r):
@@ -84,6 +89,22 @@ class Clustering(Figure):
                     z = cluster(samples, method, id)
                 except Exception as e:
                     print("Computing " + method + " for dataset " + id + " failed: " + str(e))
+
+        for sample_set, method in self.sample_sets.index.values:
+            centroids = self.cells.groupby([method + '_' + sample_set])['cy', 'mCherry', 'ext_mCherry'].mean()
+            index = pd.MultiIndex.from_product([[sample_set], [method], range(1, self.k + 1)],
+                                               names=['SampleSet', 'Method', 'Cluster'])
+            centroids = centroids.reindex(index, level=2)
+            self.centroids = self.centroids.append(centroids, sort=False)
+
+        print(self.sample_sets.index.get_level_values('SampleSet').values)
+
+
+
+        fig = plt.figure(figsize=[5, 5])
+        ax = fig.add_subplot(1, 1, 1)
+        ax.scatter(self.centroids['cy'], self.centroids['mCherry'], c=self.centroids['ext_mCherry'])
+        fig.show()
 
     def plot(self, outdir):
 
@@ -173,7 +194,7 @@ parser.add_argument('--log')
 parser.add_argument('--outdir')
 parser.add_argument('--clusters', default=6)
 parser.add_argument('--samples', default=5)
-parser.add_argument('--repeats', default=1)
+parser.add_argument('--repeats', default=5)
 parser.add_argument('--reproducible', dest='reproducible', action='store_true')
 parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
 parser.set_defaults(reproducible=False)
@@ -199,8 +220,6 @@ data = DiscData(args)
 # if __name__ == '__main__':
 #     with Pool(2) as p:
 #         p.map(run_process, multiopt)
-
-print(args.reproducible)
 
 if args.reproducible:
     np.random.seed(0)
