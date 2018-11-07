@@ -11,6 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.cluster.hierarchy import fcluster
+from scipy.spatial.distance import cdist, euclidean
 from scipy import stats
 import operator
 import hdbscan
@@ -39,7 +40,7 @@ class Clustering(Figure):
         index = pd.MultiIndex.from_product([[], []], names=['SampleSet', 'Method'])
         self.sample_sets = pd.DataFrame(columns=['Sample_{0}'.format(s) for s in range(0, self.n)], index=index)
         index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cluster'])
-        self.centroids = pd.DataFrame(columns=['cy', 'mCherry', 'ext_mCherry'])
+        self.centroids = pd.DataFrame(columns=['cy', 'mCherry', 'ext_mCherry'], index=index)
 
     def compute(self):
         def h_cluster(x, method=None):
@@ -96,14 +97,40 @@ class Clustering(Figure):
                                                names=['SampleSet', 'Method', 'Cluster'])
             centroids = centroids.reindex(index, level=2)
             self.centroids = self.centroids.append(centroids, sort=False)
+        self.centroids[self.centroids.columns] = stats.zscore(self.centroids.values)
 
-        print(self.sample_sets.index.get_level_values('SampleSet').values)
-
-
+        # Clustering cluster centroids xD
+        iters = 0
+        last = np.zeros(self.centroids.loc[self.centroids.index.levels[0][0]].values.shape)
+        prev = last
+        samples = 1
+        score = np.inf
+        while score > 0.01 and iters < 1000:
+            sample_sets = self.sample_sets.index.get_level_values('SampleSet').values.tolist()
+            if iters == 0:
+                index = np.random.randint(0, len(sample_sets))
+                last = self.centroids.loc[sample_sets.pop(index)].values
+            iters = iters + 1
+            while len(sample_sets) > 0:
+                index = np.random.randint(0, len(sample_sets))
+                current = self.centroids.loc[sample_sets.pop(index)].values
+                distances = cdist(last, current)
+                pairs = np.argmin(distances, axis=1)
+                ambiguous = len(pairs) - len(np.unique(pairs))
+                if ambiguous == 0:
+                    samples = samples + 1
+                    new = np.empty(last.shape)
+                    for i in range(0, new.shape[0]):
+                        new[i] = (last[i] * (1 - (1 / samples)) + current[pairs[i]] * (1 / samples))
+                    last = new
+            score = np.sum(np.abs(prev - last))
+            prev = last
+        print("Done in", iters, "iterations!", "Score is", score)
 
         fig = plt.figure(figsize=[5, 5])
         ax = fig.add_subplot(1, 1, 1)
         ax.scatter(self.centroids['cy'], self.centroids['mCherry'], c=self.centroids['ext_mCherry'])
+        ax.scatter(last[:,0], last[:,1])
         fig.show()
 
     def plot(self, outdir):
