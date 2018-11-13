@@ -26,7 +26,7 @@ class Clustering(Figure):
     C_FEATURES = ['cy', 'mCherry', 'ext_mCherry']
     FEATURES = ['cx', 'cy', 'cz', 'mCherry', 'ext_mCherry', 'ang_max_mCherry', 'Volume']
 
-    def __init__(self, data, method=None, metric='euclidean', k=6, n=5, r=3):
+    def __init__(self, data, method=None, metric='euclidean', k=6, n=5, r=3, cutoff=-1):
         super().__init__(data)
         self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
         self.method = method
@@ -34,6 +34,7 @@ class Clustering(Figure):
         self.k = k
         self.r = r
         self.n = n
+        self.cutoff = cutoff
         self.methods = [
             # 'single',
             # 'complete',
@@ -48,7 +49,7 @@ class Clustering(Figure):
         index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cluster'])
         self.centroids = pd.DataFrame(columns=['cy', 'mCherry', 'ext_mCherry'], index=index)
         index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cell'])
-        self.clusters = pd.DataFrame(columns=['LocalCluster'], index=index).astype('int64')
+        self.clusters: pd.DataFrame = pd.DataFrame(columns=['LocalCluster'], index=index).astype('int64')
 
     def compute(self):
 
@@ -98,7 +99,7 @@ class Clustering(Figure):
                         z = cluster(samples, method, id)
                     except Exception as e:
                         print("Computing " + method + " for dataset " + id + " failed: " + str(e))
-            self.centroids = self.clusters.join(
+            self.centroids: pd.DataFrame = self.clusters.join(
                 self.cells[self.C_FEATURES], on='Cell').groupby(
                 ['SampleSet', 'Method', 'LocalCluster'])[self.C_FEATURES].mean()
             self.centroids[self.centroids.columns] = stats.zscore(self.centroids.values)
@@ -152,9 +153,9 @@ class Clustering(Figure):
                 score = np.sum(np.abs(prev - last))
                 prev = last
             print("Done in", iters, "iterations!", "Score is", score)
-            return last
+            return pd.DataFrame(last, columns=self.C_FEATURES)
 
-        def random_forest(method):
+        def random_forest(method, cutoff=-1.0):
             def cluster_mode(series):
                 try:
                     return statistics.mode(series.tolist())
@@ -163,7 +164,13 @@ class Clustering(Figure):
 
             print("Training classifier...")
             idx = pd.IndexSlice
-            global_clusters = self.clusters.loc[idx[:, method, :], :].groupby('Cell')['Cluster'].agg(cluster_mode)
+            if cutoff == -1.0:
+                clusters = self.clusters.loc[idx[:, method, :], :]
+            else:
+                clusters = self.clusters.loc[idx[:, method, :], :]\
+                    .join(self.centroids.loc[self.centroids['Distance'] < cutoff, 'Distance'],
+                          on=['SampleSet', 'Method', 'LocalCluster'], how='right')
+            global_clusters = clusters.groupby('Cell')['Cluster'].agg(cluster_mode)
             global_clusters.drop(global_clusters[global_clusters == 0].index, inplace=True)
             # Random Forest: https://towardsdatascience.com/random-forest-in-python-24d0893d51c0
             rf = RandomForestClassifier(n_estimators=1000, n_jobs=-1)
@@ -173,15 +180,17 @@ class Clustering(Figure):
             self.cells['Cluster_' + method] = rf.predict(self.cells[self.FEATURES])
             print("Done.")
 
-        def plot_centroids(method, centroids):
-            idx = pd.IndexSlice
-            cids = self.centroids.loc[idx[:, method], :]
+        def name_clusters():
+            # TODO: implement cluster naming
+            pass
+
+        def plot_centroids(s_centroids, g_centroids):
             fig = plt.figure(figsize=[5, 5])
             ax = fig.add_subplot(1, 1, 1)
-            clustered = cids.loc[cids['Cluster'] != 0]
-            ax.scatter(clustered['cy'], clustered['mCherry'], c=clustered['Cluster'], s=160, cmap='Paired')
-            ax.scatter(cids['cy'], cids['mCherry'], c=cids['ext_mCherry'])
-            ax.scatter(centroids[:, 0], centroids[:, 1], c='red', s=80, marker='*')
+            c_centroids = s_centroids.loc[s_centroids['Cluster'] != 0]
+            ax.scatter(c_centroids['cy'], c_centroids['mCherry'], c=c_centroids['Cluster'], s=160, cmap='Paired')
+            ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c=s_centroids['ext_mCherry'])
+            ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='red', s=80, marker='*')
             fig.show()
 
         find_centroids()
@@ -189,22 +198,21 @@ class Clustering(Figure):
         # Clustering cluster centroids xD
         self.centroids['Cluster'] = 0
         self.centroids['Distance'] = 0.0
+        idx = pd.IndexSlice
         for method in self.methods:
             centroids = cluster_centroids(method)
-            plot_centroids(method, centroids)
+            plot_centroids(self.centroids.loc[idx[:, method], :], centroids)
+
         self.clusters = self.clusters.join(self.centroids['Cluster'], on=['SampleSet', 'Method', 'LocalCluster'])
 
         for method in self.methods:
-            random_forest(method)
-            s_centroids = self.cells.groupby(['Sample', 'Cluster_' + method])[self.C_FEATURES].mean()
-            g_centroids = self.cells.groupby(['Cluster_' + method])[self.C_FEATURES].mean()
-            fig = plt.figure(figsize=[5, 5])
-            ax = fig.add_subplot(1, 1, 1)
-            ax.scatter(s_centroids['cy'], s_centroids['mCherry'],
-                       c=s_centroids.index.get_level_values('Cluster_' + method), s=160, cmap='Paired')
-            ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c=s_centroids['ext_mCherry'])
-            ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='red', s=80, marker='*')
-            fig.show()
+            random_forest(method, cutoff=self.cutoff)
+            plot_centroids(
+                self.cells.groupby(['Sample', 'Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
+                    .rename(columns={'Cluster_' + method: 'Cluster'}),
+                self.cells.groupby(['Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
+                    .rename(columns={'Cluster_' + method: 'Cluster'})
+            )
 
     def plot(self, outdir):
 
@@ -293,7 +301,8 @@ parser.add_argument('--log')
 parser.add_argument('--outdir')
 parser.add_argument('--clusters', default=6)
 parser.add_argument('--samples', default=5)
-parser.add_argument('--repeats', default=3)
+parser.add_argument('--repeats', default=5)
+parser.add_argument('--cutoff', default=2.75)
 parser.add_argument('--reproducible', dest='reproducible', action='store_true')
 parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
 parser.set_defaults(reproducible=False)
@@ -325,5 +334,5 @@ if args.reproducible:
 else:
     np.random.seed()
 
-fig_9a76 = Clustering(data, k=args.clusters, n=args.samples, r=args.repeats)
+fig_9a76 = Clustering(data, k=args.clusters, n=args.samples, r=args.repeats, cutoff=args.cutoff)
 fig_9a76.compute()
