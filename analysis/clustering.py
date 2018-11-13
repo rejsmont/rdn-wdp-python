@@ -11,14 +11,20 @@ import matplotlib
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.cluster.hierarchy import fcluster
-from scipy.spatial.distance import cdist, euclidean
+from scipy.spatial.distance import cdist
 from scipy import stats
+from sklearn.ensemble import RandomForestClassifier
 import operator
-import hdbscan
 import hashlib
+import statistics
 
 
 class Clustering(Figure):
+
+    ITER_MAX = 1000
+    MIN_SCORE = 1e-10
+    C_FEATURES = ['cy', 'mCherry', 'ext_mCherry']
+    FEATURES = ['cx', 'cy', 'cz', 'mCherry', 'ext_mCherry', 'ang_max_mCherry', 'Volume']
 
     def __init__(self, data, method=None, metric='euclidean', k=6, n=5, r=3):
         super().__init__(data)
@@ -41,11 +47,10 @@ class Clustering(Figure):
         self.sample_sets = pd.DataFrame(columns=['Sample_{0}'.format(s) for s in range(0, self.n)], index=index)
         index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cluster'])
         self.centroids = pd.DataFrame(columns=['cy', 'mCherry', 'ext_mCherry'], index=index)
+        index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cell'])
+        self.clusters = pd.DataFrame(columns=['LocalCluster'], index=index).astype('int64')
 
     def compute(self):
-        def h_cluster(x, method=None):
-            if method is None:
-                method = self.method
 
         def get_samples(n, unique=False):
             samples = self.cells[['Sample', 'Gene']].drop_duplicates().values.tolist()
@@ -72,66 +77,134 @@ class Clustering(Figure):
             if id is None:
                 id = hashlib.md5(str(samples).encode()).hexdigest()
             filter = cells['Sample'].isin(samples)
-            x = stats.zscore(cells.loc[filter, ['cy', 'mCherry', 'ext_mCherry']].values, axis=0)
+            x = stats.zscore(cells.loc[filter, self.C_FEATURES].values, axis=0)
             z = linkage(x, method)
-            cells.loc[filter, method + '_' + id] = fcluster(z, self.k, criterion='maxclust')
+            fclusters = fcluster(z, self.k, criterion='maxclust')
+            index = pd.MultiIndex.from_product([[id], [method], cells.loc[filter].index.values], names=['SampleSet', 'Method', 'Cell'])
+            self.clusters = self.clusters.append(pd.DataFrame(fclusters, columns=['LocalCluster'], index=index))
             index = pd.MultiIndex.from_product([[id], [method]], names=['SampleSet', 'Method'])
             samples = pd.DataFrame([samples], index=index, columns=['Sample_{0}'.format(s) for s in range(0, self.n)])
             self.sample_sets = self.sample_sets.append(samples)
             return z
 
-        for i in range(0, self.r):
-            samples = get_samples(self.n)
-            id = hashlib.md5(str(samples).encode()).hexdigest()
-            print(id, samples)
-            for method in self.methods:
-                print("\tComputing " + method)
-                try:
-                    z = cluster(samples, method, id)
-                except Exception as e:
-                    print("Computing " + method + " for dataset " + id + " failed: " + str(e))
+        def find_centroids():
+            for i in range(0, self.r):
+                samples = get_samples(self.n)
+                id = hashlib.md5(str(samples).encode()).hexdigest()
+                print(i, id, samples)
+                for method in self.methods:
+                    print("\tComputing ", method)
+                    try:
+                        z = cluster(samples, method, id)
+                    except Exception as e:
+                        print("Computing " + method + " for dataset " + id + " failed: " + str(e))
+            self.centroids = self.clusters.join(
+                self.cells[self.C_FEATURES], on='Cell').groupby(
+                ['SampleSet', 'Method', 'LocalCluster'])[self.C_FEATURES].mean()
+            self.centroids[self.centroids.columns] = stats.zscore(self.centroids.values)
+            self.centroids = self.centroids.sort_index()
 
-        for sample_set, method in self.sample_sets.index.values:
-            centroids = self.cells.groupby([method + '_' + sample_set])['cy', 'mCherry', 'ext_mCherry'].mean()
-            index = pd.MultiIndex.from_product([[sample_set], [method], range(1, self.k + 1)],
-                                               names=['SampleSet', 'Method', 'Cluster'])
-            centroids = centroids.reindex(index, level=2)
-            self.centroids = self.centroids.append(centroids, sort=False)
-        self.centroids[self.centroids.columns] = stats.zscore(self.centroids.values)
+        def cluster_centroids(method):
+            iters = 0
+            last = np.zeros(self.centroids.loc[(self.centroids.index.levels[0][0], method), self.C_FEATURES].values.shape)
+            prev = last
+            score = np.inf
+            while score > Clustering.MIN_SCORE and iters < Clustering.ITER_MAX:
+                sample_sets = self.sample_sets.index.get_level_values('SampleSet').values.tolist()
+                if iters == 0:
+                    index = np.random.randint(0, len(sample_sets))
+                    last = self.centroids.loc[(sample_sets.pop(index), method), self.C_FEATURES].values
+                    samples = 1
+                    new = last.copy()
+                else:
+                    samples = 0
+                    new = np.zeros(last.shape)
+                    last = prev
+                iters = iters + 1
+                while len(sample_sets) > 0:
+                    index = np.random.randint(0, len(sample_sets))
+                    cid = sample_sets.pop(index)
+                    current = self.centroids.loc[(cid, method), self.C_FEATURES].values
+                    distances = cdist(last, current)
+                    axis = 0
+                    for ax in [1, 0]:
+                        pairs = np.argmin(distances, axis=ax)
+                        ambiguous = len(pairs) - len(np.unique(pairs))
+                        if ambiguous == 0:
+                            axis = ax
+                            break
+                    if ambiguous == 0:
+                        samples = samples + 1
+                        for i in range(0, new.shape[0]):
+                            if axis == 1:
+                                new[i] = new[i] + current[pairs[i]]
+                                self.centroids.loc[(cid, method, pairs[i] + 1),
+                                                   ['Cluster', 'Distance']] = \
+                                    [(i + 1), distances[pairs[i], i]]
+                            else:
+                                new[pairs[i]] = new[pairs[i]] + current[i]
+                                self.centroids.loc[(cid, method, i + 1),
+                                                   ['Cluster', 'Distance']] = \
+                                    [(pairs[i] + 1), distances[i, pairs[i]]]
+                        if iters == 0:
+                            last = new / samples
+                last = new / samples
+                score = np.sum(np.abs(prev - last))
+                prev = last
+            print("Done in", iters, "iterations!", "Score is", score)
+            return last
+
+        def random_forest(method):
+            def cluster_mode(series):
+                try:
+                    return statistics.mode(series.tolist())
+                except statistics.StatisticsError:
+                    return 0
+
+            print("Training classifier...")
+            idx = pd.IndexSlice
+            global_clusters = self.clusters.loc[idx[:, method, :], :].groupby('Cell')['Cluster'].agg(cluster_mode)
+            global_clusters.drop(global_clusters[global_clusters == 0].index, inplace=True)
+            # Random Forest: https://towardsdatascience.com/random-forest-in-python-24d0893d51c0
+            rf = RandomForestClassifier(n_estimators=1000, n_jobs=-1)
+            # Train the model on training data
+            rf.fit(self.cells.loc[global_clusters.index, self.FEATURES], global_clusters)
+            print("Computing predictions...")
+            self.cells['Cluster_' + method] = rf.predict(self.cells[self.FEATURES])
+            print("Done.")
+
+        def plot_centroids(method, centroids):
+            idx = pd.IndexSlice
+            cids = self.centroids.loc[idx[:, method], :]
+            fig = plt.figure(figsize=[5, 5])
+            ax = fig.add_subplot(1, 1, 1)
+            clustered = cids.loc[cids['Cluster'] != 0]
+            ax.scatter(clustered['cy'], clustered['mCherry'], c=clustered['Cluster'], s=160, cmap='Paired')
+            ax.scatter(cids['cy'], cids['mCherry'], c=cids['ext_mCherry'])
+            ax.scatter(centroids[:, 0], centroids[:, 1], c='red', s=80, marker='*')
+            fig.show()
+
+        find_centroids()
 
         # Clustering cluster centroids xD
-        iters = 0
-        last = np.zeros(self.centroids.loc[self.centroids.index.levels[0][0]].values.shape)
-        prev = last
-        samples = 1
-        score = np.inf
-        while score > 0.01 and iters < 1000:
-            sample_sets = self.sample_sets.index.get_level_values('SampleSet').values.tolist()
-            if iters == 0:
-                index = np.random.randint(0, len(sample_sets))
-                last = self.centroids.loc[sample_sets.pop(index)].values
-            iters = iters + 1
-            while len(sample_sets) > 0:
-                index = np.random.randint(0, len(sample_sets))
-                current = self.centroids.loc[sample_sets.pop(index)].values
-                distances = cdist(last, current)
-                pairs = np.argmin(distances, axis=1)
-                ambiguous = len(pairs) - len(np.unique(pairs))
-                if ambiguous == 0:
-                    samples = samples + 1
-                    new = np.empty(last.shape)
-                    for i in range(0, new.shape[0]):
-                        new[i] = (last[i] * (1 - (1 / samples)) + current[pairs[i]] * (1 / samples))
-                    last = new
-            score = np.sum(np.abs(prev - last))
-            prev = last
-        print("Done in", iters, "iterations!", "Score is", score)
+        self.centroids['Cluster'] = 0
+        self.centroids['Distance'] = 0.0
+        for method in self.methods:
+            centroids = cluster_centroids(method)
+            plot_centroids(method, centroids)
+        self.clusters = self.clusters.join(self.centroids['Cluster'], on=['SampleSet', 'Method', 'LocalCluster'])
 
-        fig = plt.figure(figsize=[5, 5])
-        ax = fig.add_subplot(1, 1, 1)
-        ax.scatter(self.centroids['cy'], self.centroids['mCherry'], c=self.centroids['ext_mCherry'])
-        ax.scatter(last[:,0], last[:,1])
-        fig.show()
+        for method in self.methods:
+            random_forest(method)
+            s_centroids = self.cells.groupby(['Sample', 'Cluster_' + method])[self.C_FEATURES].mean()
+            g_centroids = self.cells.groupby(['Cluster_' + method])[self.C_FEATURES].mean()
+            fig = plt.figure(figsize=[5, 5])
+            ax = fig.add_subplot(1, 1, 1)
+            ax.scatter(s_centroids['cy'], s_centroids['mCherry'],
+                       c=s_centroids.index.get_level_values('Cluster_' + method), s=160, cmap='Paired')
+            ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c=s_centroids['ext_mCherry'])
+            ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='red', s=80, marker='*')
+            fig.show()
 
     def plot(self, outdir):
 
@@ -151,7 +224,6 @@ class Clustering(Figure):
                 leaf_rotation=90.,      # rotates the x axis labels
                 leaf_font_size=8,       # font size for the x axis labels
                 show_contracted=True,   # to get a distribution impression in truncated branches
-                # max_d=p,              # plot distance cutoff line
                 ax=ax,
                 link_color_func=lambda c: 'black'
             )
@@ -221,7 +293,7 @@ parser.add_argument('--log')
 parser.add_argument('--outdir')
 parser.add_argument('--clusters', default=6)
 parser.add_argument('--samples', default=5)
-parser.add_argument('--repeats', default=5)
+parser.add_argument('--repeats', default=3)
 parser.add_argument('--reproducible', dest='reproducible', action='store_true')
 parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
 parser.set_defaults(reproducible=False)
