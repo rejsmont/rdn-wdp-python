@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from analysis.figures_ng import Figure, DiscData
 import argparse
 import logging
 import os
@@ -9,6 +8,7 @@ import pandas as pd
 import matplotlib
 #matplotlib.use('agg')
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.cluster.hierarchy import fcluster
 from scipy.spatial.distance import cdist
@@ -17,41 +17,139 @@ from sklearn.ensemble import RandomForestClassifier
 import operator
 import hashlib
 import statistics
+import yaml
+from data import DiscData
 
 
-class Clustering(Figure):
+class Clustering:
 
     ITER_MAX = 1000
     MIN_SCORE = 1e-10
     C_FEATURES = ['cy', 'mCherry', 'ext_mCherry']
     FEATURES = ['cx', 'cy', 'cz', 'mCherry', 'ext_mCherry', 'ang_max_mCherry', 'Volume']
 
-    def __init__(self, data, method=None, metric='euclidean', k=6, n=5, r=3, cutoff=-1):
-        super().__init__(data)
-        self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
-        self.method = method
-        self.metric = metric
-        self.k = k
-        self.r = r
-        self.n = n
-        self.cutoff = cutoff
-        self.methods = [
-            # 'single',
-            # 'complete',
-            # 'average',
-            # 'weighted',
-            # 'centroid',
-            # 'median',
-            'ward',
-        ]
-        index = pd.MultiIndex.from_product([[], []], names=['SampleSet', 'Method'])
-        self.sample_sets = pd.DataFrame(columns=['Sample_{0}'.format(s) for s in range(0, self.n)], index=index)
+    data: DiscData = None
+    cells: pd.DataFrame = None
+    centroids: pd.DataFrame = None
+    clusters: pd.DataFrame = None
+    names: pd.DataFrame = None
+    sample_sets = {}
+
+    method = 'ward'
+    metric = 'euclidean'
+    k = 6
+    n = 5
+    r = 3
+    cutoff = -1
+    can_compute = False
+    computed = False
+    outdir = None
+
+    def __init__(self, data, **kwargs):
+        initialized = self.from_data(data) or self.from_csv(data) or self.from_yml(data)
+        if not initialized:
+            raise RuntimeError("Failed to initialize Clustering class")
+        self.init_params(**kwargs)
+
+    def from_csv(self, datafile):
+        try:
+            return self.from_data(DiscData(datafile))
+        except RuntimeError:
+            return False
+
+    def from_yml(self, datafile):
+        with open(datafile, 'r') as stream:
+            metadata = yaml.safe_load(stream)
+            return self.from_metadata(metadata)
+
+    def from_data(self, data):
+        if isinstance(data, DiscData):
+            self.data = data
+            self.can_compute = self.init_cells()
+            return True
+        return False
+
+    def from_metadata(self, metadata):
+
+        def explore(func, path, basedir=None, **kwargs):
+            if basedir is None:
+                paths = [path, os.path.basename(path)]
+            else:
+                path = os.path.basename(path)
+                paths = [path, os.path.join(basedir, path)]
+            result = None
+            for path in paths:
+                try:
+                    result = func(path, **kwargs)
+                except:
+                    continue
+                break
+            return result
+
+        def valid(df):
+            return df is not None and ((isinstance(df, pd.DataFrame) and not df.empty) or df)
+
+        if metadata is None:
+            return False
+
+        self.data = explore(DiscData, metadata['input']['cells'], metadata['input']['dir'])
+        self.cells = explore(pd.read_csv, metadata['output']['cells'], metadata['output']['dir'], index_col=0)
+        self.centroids = explore(pd.read_csv, metadata['output']['centroids'], metadata['output']['dir'],
+                                 index_col=[0, 1, 2])
+        self.clusters = explore(pd.read_csv, metadata['output']['clusters'], metadata['output']['dir'],
+                                index_col=[0, 1, 2])
+        self.sample_sets = metadata['classification']['sets']
+        params = {
+            'outdir': metadata['output']['dir'],
+            'k': metadata['clustering']['clusters'],
+            'method': metadata['clustering']['method'],
+            'metric': metadata['clustering']['metric'],
+            'cutoff': metadata['classification']['cutoff'],
+            'n': metadata['classification']['samples'],
+            'r': metadata['classification']['repeats'],
+        }
+        self.init_params(**params)
+        self.can_compute = self.init_cells()
+        self.computed = \
+            valid(self.cells) and valid(self.centroids) and valid(self.clusters) and valid(self.sample_sets)
+
+        return self.can_compute or self.computed
+
+    def init_cells(self, override=False):
+        if (override or self.cells is None or self.cells.empty) and self.data is not None:
+            self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
+            if override:
+                self.computed = False
+        if self.cells is not None and not self.cells.empty:
+            return True
+        return False
+
+    def init_params(self, **kwargs):
+        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir']
+        args = kwargs.pop('args', argparse.Namespace())
+        for key in allowed:
+            for value in [kwargs.get(key, None), getattr(args, key, None)]:
+                if value is not None:
+                    if key != 'outdir' and self.computed and getattr(self, key) != value:
+                        self.computed = False
+                    setattr(self, key, value)
+                    break
+
+    def reset(self):
+        self.sample_sets = {}
         index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cluster'])
-        self.centroids = pd.DataFrame(columns=['cy', 'mCherry', 'ext_mCherry'], index=index)
+        self.centroids = pd.DataFrame(columns=self.C_FEATURES, index=index)
+        self.names = pd.DataFrame(columns=['Name'], index=index)
         index = pd.MultiIndex.from_product([[], [], []], names=['SampleSet', 'Method', 'Cell'])
         self.clusters: pd.DataFrame = pd.DataFrame(columns=['LocalCluster'], index=index).astype('int64')
+        if self.cells is not None:
+            self.cells['Cluster_' + self.method] = 0
+        self.computed = False
 
     def compute(self):
+        if not self.can_compute:
+            raise RuntimeError("Nothing to compute")
+        self.reset()
 
         def get_samples(n, unique=False):
             samples = self.cells[['Sample', 'Gene']].drop_duplicates().values.tolist()
@@ -81,24 +179,22 @@ class Clustering(Figure):
             x = stats.zscore(cells.loc[filter, self.C_FEATURES].values, axis=0)
             z = linkage(x, method)
             fclusters = fcluster(z, self.k, criterion='maxclust')
-            index = pd.MultiIndex.from_product([[id], [method], cells.loc[filter].index.values], names=['SampleSet', 'Method', 'Cell'])
+            index = pd.MultiIndex.from_product([[id], [method], cells.loc[filter].index.values],
+                                               names=['SampleSet', 'Method', 'Cell'])
             self.clusters = self.clusters.append(pd.DataFrame(fclusters, columns=['LocalCluster'], index=index))
-            index = pd.MultiIndex.from_product([[id], [method]], names=['SampleSet', 'Method'])
-            samples = pd.DataFrame([samples], index=index, columns=['Sample_{0}'.format(s) for s in range(0, self.n)])
-            self.sample_sets = self.sample_sets.append(samples)
+            self.sample_sets[id] = samples
             return z
 
-        def find_centroids():
+        def find_centroids(method):
             for i in range(0, self.r):
                 samples = get_samples(self.n)
                 id = hashlib.md5(str(samples).encode()).hexdigest()
                 print(i, id, samples)
-                for method in self.methods:
-                    print("\tComputing ", method)
-                    try:
-                        z = cluster(samples, method, id)
-                    except Exception as e:
-                        print("Computing " + method + " for dataset " + id + " failed: " + str(e))
+                print("\tComputing ", method)
+                try:
+                    z = cluster(samples, method, id)
+                except Exception as e:
+                    print("Computing " + method + " for dataset " + id + " failed: " + str(e))
             self.centroids: pd.DataFrame = self.clusters.join(
                 self.cells[self.C_FEATURES], on='Cell').groupby(
                 ['SampleSet', 'Method', 'LocalCluster'])[self.C_FEATURES].mean()
@@ -106,12 +202,23 @@ class Clustering(Figure):
             self.centroids = self.centroids.sort_index()
 
         def cluster_centroids(method):
+
+            def create_dataframe(array):
+                centroids = pd.DataFrame(
+                    array, columns=self.C_FEATURES,
+                    index=range(1, array.shape[0] + 1)).rename_axis('LocalCluster')
+                clusters = pd.DataFrame(
+                    [['global', method, x, x, 0.0] for x in range(1, array.shape[0] + 1)],
+                    columns=['SampleSet', 'Method', 'LocalCluster', 'Cluster', 'Distance']
+                ).set_index(['SampleSet', 'Method', 'LocalCluster'])
+                return clusters.join(centroids, on='LocalCluster').reindex(columns=self.centroids.columns)
+
             iters = 0
             last = np.zeros(self.centroids.loc[(self.centroids.index.levels[0][0], method), self.C_FEATURES].values.shape)
             prev = last
             score = np.inf
             while score > Clustering.MIN_SCORE and iters < Clustering.ITER_MAX:
-                sample_sets = self.sample_sets.index.get_level_values('SampleSet').values.tolist()
+                sample_sets = list(self.sample_sets.keys())
                 if iters == 0:
                     index = np.random.randint(0, len(sample_sets))
                     last = self.centroids.loc[(sample_sets.pop(index), method), self.C_FEATURES].values
@@ -153,7 +260,7 @@ class Clustering(Figure):
                 score = np.sum(np.abs(prev - last))
                 prev = last
             print("Done in", iters, "iterations!", "Score is", score)
-            return pd.DataFrame(last, columns=self.C_FEATURES)
+            self.centroids = self.centroids.append(create_dataframe(last))
 
         def random_forest(method, cutoff=-1.0):
             def cluster_mode(series):
@@ -172,167 +279,128 @@ class Clustering(Figure):
                           on=['SampleSet', 'Method', 'LocalCluster'], how='right')
             global_clusters = clusters.groupby('Cell')['Cluster'].agg(cluster_mode)
             global_clusters.drop(global_clusters[global_clusters == 0].index, inplace=True)
-            # Random Forest: https://towardsdatascience.com/random-forest-in-python-24d0893d51c0
             rf = RandomForestClassifier(n_estimators=1000, n_jobs=-1)
-            # Train the model on training data
             rf.fit(self.cells.loc[global_clusters.index, self.FEATURES], global_clusters)
             print("Computing predictions...")
             self.cells['Cluster_' + method] = rf.predict(self.cells[self.FEATURES])
             print("Done.")
 
         def name_clusters():
-            # TODO: implement cluster naming
-            pass
+            idx = pd.IndexSlice
+            named_clusters = self.centroids.loc[idx['global', self.method, :], :]
+            # Cluster A - R8 cells
+            cluster_a = named_clusters['ext_mCherry'].idxmax()
+            named_clusters = named_clusters.drop(cluster_a)
 
-        def plot_centroids(s_centroids, g_centroids):
-            fig = plt.figure(figsize=[5, 5])
-            ax = fig.add_subplot(1, 1, 1)
-            c_centroids = s_centroids.loc[s_centroids['Cluster'] != 0]
-            ax.scatter(c_centroids['cy'], c_centroids['mCherry'], c=c_centroids['Cluster'], s=160, cmap='Paired')
-            ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c=s_centroids['ext_mCherry'])
-            ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='red', s=80, marker='*')
-            fig.show()
+            # Cluster B - MF high ato
+            cluster_b = named_clusters['mCherry'].idxmax()
+            named_clusters = named_clusters.drop(cluster_b)
+            # Cluster C - post MF
+            cluster_c = named_clusters['cy'].idxmax()
+            named_clusters = named_clusters.drop(cluster_c)
+            # Cluster D - pre MF
+            cluster_d = named_clusters['cy'].idxmin()
+            named_clusters = named_clusters.drop(cluster_d)
+            # Cluster E - MF ato
+            cluster_e = named_clusters['mCherry'].idxmax()
+            named_clusters = named_clusters.drop(cluster_e)
+            # Cluster F - MF background
+            cluster_f = named_clusters['mCherry'].idxmin()
+            named_clusters = named_clusters.drop(cluster_f)
+            index = pd.MultiIndex.from_tuples([cluster_a, cluster_b, cluster_c, cluster_d, cluster_e, cluster_f],
+                                              names=['SampleSet', 'Method', 'Cluster'])
+            names = pd.DataFrame(['R8', 'MF high', 'post MF', 'pre MF', 'MF ato', 'MF background'],
+                                 index=index, columns=['Name'])
+            self.centroids = self.centroids.join(names.xs(('global', self.method)), on='Cluster')
 
-        find_centroids()
-
-        # Clustering cluster centroids xD
+        find_centroids(self.method)
         self.centroids['Cluster'] = 0
         self.centroids['Distance'] = 0.0
-        idx = pd.IndexSlice
-        for method in self.methods:
-            centroids = cluster_centroids(method)
-            plot_centroids(self.centroids.loc[idx[:, method], :], centroids)
-
+        cluster_centroids(self.method)
         self.clusters = self.clusters.join(self.centroids['Cluster'], on=['SampleSet', 'Method', 'LocalCluster'])
+        random_forest(self.method, cutoff=self.cutoff)
+        name_clusters()
 
-        for method in self.methods:
-            random_forest(method, cutoff=self.cutoff)
-            plot_centroids(
-                self.cells.groupby(['Sample', 'Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
-                    .rename(columns={'Cluster_' + method: 'Cluster'}),
-                self.cells.groupby(['Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
-                    .rename(columns={'Cluster_' + method: 'Cluster'})
-            )
+    def base_filename(self):
+        base_name = 'k' + str(self.k) + 'n' + str(self.n) + 'r' + str(self.r)
+        if self.cutoff == -1:
+            return base_name
+        else:
+            return 'c' + str(round(self.cutoff*100)) + base_name
 
-    def plot(self, outdir):
+    def clusters_filename(self):
+        return self.base_filename() + '_' + 'clusters.csv'
 
-        def sorted_legend(handles, labels=None):
-            if labels is None:
-                handles, labels = handles
-            hl = sorted(zip(handles, labels), key=operator.itemgetter(1))
-            handles2, labels2 = zip(*hl)
-            labels3 = [l.replace(' 0', ' ') for l in labels2]
-            return handles2, labels3
+    def centroids_filename(self):
+        return self.base_filename() + '_' + 'centroids.csv'
 
-        def h_cluster_dendrogram(z, ax, c_colors):
-            dd = dendrogram(
-                z,
-                truncate_mode='lastp',  # show only the last p merged clusters
-                p=self.k,               # show only the last p merged clusters
-                leaf_rotation=90.,      # rotates the x axis labels
-                leaf_font_size=8,       # font size for the x axis labels
-                show_contracted=True,   # to get a distribution impression in truncated branches
-                ax=ax,
-                link_color_func=lambda c: 'black'
-            )
-            ax.set_xticklabels(['Cluster %d' % c for c in range(1, len(ax.get_xmajorticklabels()) + 1)])
-            x_lbls = ax.get_xmajorticklabels()
-            num = -1
-            for lbl in x_lbls:
-                num += 1
-                lbl.set_color(c_colors(num))
-            return dd
+    def cells_filename(self):
+        return self.base_filename() + '_' + 'cells.csv'
 
-        # fig = plt.figure(figsize=[10, 10])
-        # ax = fig.add_subplot(2, 2, 1)
-        # ax_xi = fig.add_subplot(2, 2, 2)
-        # ax_xy = fig.add_subplot(2, 2, 4)
+    def meta_filename(self):
+        return self.base_filename() + '_' + 'metadata.yml'
 
-        # cells.loc[cells.groupby('Cluster')['Cluster'].transform('count').sort_values(ascending=False).index]
+    def save(self, outdir=None):
+        if outdir is None:
+            outdir = '.' if self.outdir is None else self.outdir
 
-        # clusters = cells.groupby('Cluster')['cx'].count().sort_values(ascending=False).index.tolist()
-        # c_colors = plt.cm.get_cmap("gist_rainbow", len(clusters))
-        # h_cluster_dendrogram(z, ax, c_colors)
-        #
-        # for cluster in clusters:
-        #     if cluster == 0:
-        #         continue
-        #     c_cells = cells[cells['Cluster'] == cluster]
-        #     c_count = c_cells['Cluster'].count()
-        #     label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
-        #     ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
-        #     ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
-        #
-        # handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
-        # ax = fig.add_subplot(2, 2, 3)
-        # ax.set_axis_off()
-        # ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
-        #
-        # filename = id + '_' + method + '_' + str(self.k) + '.png'
-        # fig.savefig(os.path.join(outdir, filename))
-        # plt.close(fig)
-        #
-        # samples = cells['Sample'].unique().tolist()
-        # for sample in samples:
-        #     fig = plt.figure(figsize=[10, 10])
-        #     ax_xyi = fig.add_subplot(2, 2, 1)
-        #     ax_xi = fig.add_subplot(2, 2, 4)
-        #     ax_xy = fig.add_subplot(2, 2, 2)
-        #     s_cells = cells[cells['Sample'] == sample].sort_values('mCherry')
-        #     ax_xyi.scatter(s_cells['cx'], s_cells['cy'], c=s_cells['mCherry'])
-        #     for cluster in clusters:
-        #         c_cells = s_cells[s_cells['Cluster'] == cluster]
-        #         c_count = c_cells['Cluster'].count()
-        #         label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
-        #         ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
-        #         ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
-        #     handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
-        #     ax = fig.add_subplot(2, 2, 3)
-        #     ax.set_axis_off()
-        #     ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
-        #     filename = id + '_' + method + '_' + str(self.k) + '_' + sample + '.png'
-        #     fig.savefig(os.path.join(outdir, filename))
-        #     plt.close(fig)
+        metadata = {
+            'input': {
+                'dir': os.path.dirname(self.data.source()),
+                'cells': os.path.basename(self.data.source())
+            },
+            'output': {
+                'dir': outdir,
+                'clusters': self.clusters_filename(),
+                'centroids': self.centroids_filename(),
+                'cells': self.cells_filename()
+            },
+            'clustering': {
+                'method': self.method,
+                'metric': self.metric,
+                'clusters': self.k,
+            },
+            'classification': {
+                'samples': self.n,
+                'repeats': self.r,
+                'cutoff': self.cutoff,
+                'sets': self.sample_sets,
+            },
+        }
+        with open(os.path.join(outdir, self.meta_filename()), 'w') as metafile:
+            yaml.dump(metadata, metafile, default_flow_style=False)
+        self.clusters.to_csv(os.path.join(outdir, self.clusters_filename()))
+        self.centroids.to_csv(os.path.join(outdir, self.centroids_filename()))
+        self.cells.to_csv(os.path.join(outdir, self.cells_filename()))
 
 
-parser = argparse.ArgumentParser(description='Plot all data.')
-parser.add_argument('--data', required=True)
-parser.add_argument('--log')
-parser.add_argument('--outdir')
-parser.add_argument('--clusters', default=6)
-parser.add_argument('--samples', default=5)
-parser.add_argument('--repeats', default=5)
-parser.add_argument('--cutoff', default=2.75)
-parser.add_argument('--reproducible', dest='reproducible', action='store_true')
-parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
-parser.set_defaults(reproducible=False)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Plot all data.')
+    parser.add_argument('--data', required=True)
+    parser.add_argument('--log')
+    parser.add_argument('--outdir')
+    parser.add_argument('--clusters')
+    parser.add_argument('--samples')
+    parser.add_argument('--repeats')
+    parser.add_argument('--cutoff')
+    parser.add_argument('--reproducible', dest='reproducible', action='store_true')
+    parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
+    parser.set_defaults(reproducible=False)
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-if args.log:
-    logging.basicConfig(level=args.log.upper())
-    logging.getLogger('PIL.Image').setLevel(logging.INFO)
-    logging.getLogger('matplotlib').setLevel(logging.INFO)
-    logging.getLogger('joblib').setLevel(logging.INFO)
+    if args.log:
+        logging.basicConfig(level=args.log.upper())
+        logging.getLogger('PIL.Image').setLevel(logging.INFO)
+        logging.getLogger('matplotlib').setLevel(logging.INFO)
+        logging.getLogger('joblib').setLevel(logging.INFO)
+        logging.getLogger('cloudpickle').setLevel(logging.INFO)
 
-data = DiscData(args)
+    if args.reproducible:
+        np.random.seed(0)
+    else:
+        np.random.seed()
 
-# def run_process(option):
-#     figure = Figure_9a76(data, gene=gene, sample='all', method=option, k=7)
-#     try:
-#         figure.plot(args.outdir)
-#     except Exception as e:
-#         print("Plotting " + figure.metric + " failed: " + str(e))
-#
-#
-# if __name__ == '__main__':
-#     with Pool(2) as p:
-#         p.map(run_process, multiopt)
-
-if args.reproducible:
-    np.random.seed(0)
-else:
-    np.random.seed()
-
-fig_9a76 = Clustering(data, k=args.clusters, n=args.samples, r=args.repeats, cutoff=args.cutoff)
-fig_9a76.compute()
+    clustering = Clustering(args.data, args=args)
+    clustering.compute()
+    clustering.save(args.outdir)

@@ -12,7 +12,8 @@ import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from scipy.signal import savgol_filter
-
+from data import DiscData
+from clustering import Clustering
 
 GX_MIN = 0
 GX_MAX = 80
@@ -309,171 +310,6 @@ class MultiCellPlot(Plot):
                                 labelleft=False, labelright=False)
 
 
-class DiscData:
-
-    def __init__(self, args):
-        self._cells = pd.read_csv(args.data)
-        self._cells_clean = None
-        self._cells_background = None
-        self._cells_ato = None
-        self._cells_no_ato = None
-        self._genes = None
-        self._genes_sorted = None
-        self._profiles = None
-        self._dv_profiles = None
-        self._matrices = None
-        self.clean_up()
-        self._clean_mask = None
-        self._background_mask = None
-        self._furrow_mask = None
-
-    def clean_up(self):
-        # Remove artifact from sample ZBO7IH
-        artifact = self._cells[(self._cells['Sample'] == 'ZBO7IH') &
-                               (self._cells['cy'] > 35) &
-                               (self._cells['cx'] > 20) &
-                               (self._cells['cx'] < 30)].index
-        self._cells = self._cells.drop(artifact)
-
-        # Mark and remove bad CG9801 samples
-        bad_samples = ['J0RYWJ', '3SKX4V', '7AMINR', '4EAAEF', 'VH2DCR', 'WJ8F8M', 'ZNVOPe', 'APKoAe', 'zfroDh',
-                              'lgxpL6', 'pcTNzE', '80IkVQ', 'UQZJ3K']
-        self._cells.loc[self._cells['Sample'].isin(bad_samples), 'Gene'] = 'CG9801-B'
-        bad_cells = self._cells[self._cells['Gene'] == 'CG9801-B'].index
-        self._cells = self._cells.drop(bad_cells)
-
-    # Binary masks for identifying cell types #
-
-    def clean_mask(self):
-        if self._clean_mask is None:
-            self._clean_mask = self._cells['Gene'].isin(self.genes_clean())
-        return self._clean_mask
-
-    def furrow_mask(self):
-        if self._furrow_mask is None:
-            self._furrow_mask = (self._cells['cy'] >= -10) & (self._cells['cy'] <= 10)
-        return self._furrow_mask
-
-    def background_mask(self):
-        if self._background_mask is None:
-            self._background_mask = (self._cells['cy'] >= -10) & (self._cells['cy'] <= -5)
-        return self._background_mask
-
-
-    # Shortcuts to get cells (filtered) #
-
-    def cells(self):
-        return self._cells
-
-    def cells_clean(self):
-        if self._cells_clean is None:
-            self._cells_clean = self._cells[self._cells['Gene'].isin(self.genes_clean())]
-        return self._cells_clean
-
-    def cells_background(self):
-        if self._cells_background in None:
-            self._cells_background = self._cells[(self._cells['cy'] >= -10) & (self._cells['cy'] <= -5)]
-        return self._cells_background
-
-    def cells_ato(self):
-        if self._cells_ato is None:
-            cells = self._cells()
-            background = self.cells_background()
-            self._cells_ato = cells[(cells['mCherry'] > background['mCherry'].quantile(0.90))]
-        return self._cells_ato
-
-    def cells_no_ato(self):
-        if self._cells_no_ato is None:
-            cells = self._cells()
-            background = self.cells_background()
-            self._cells_no_ato = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
-        return self._cells_no_ato
-
-    def genes(self):
-        if not self._genes:
-            self._genes = self._cells['Gene'].unique().tolist()
-        return self.genes_sorted
-
-    def genes_sorted(self):
-        if self._genes_sorted is None:
-            before = self._cells[self._cells['cy'] < 0].groupby(['Gene'])['Venus'].quantile(0.99)
-            after = self._cells[(self._cells['cy'] > 0) & (self._cells['cy'] < 20)].groupby(['Gene'])['Venus'].quantile(0.99)
-            ratio = after / before
-            self._genes_sorted = ratio.sort_values(ascending=False).index.tolist()
-        return self._genes_sorted
-
-    @staticmethod
-    def genes_clean():
-        return ['CG31176', 'beat-IIIc', 'king-tubby', 'lola-P', 'nmo', 'sNPF', 'Vn', 'Fas2', 'siz']
-
-    def profiles(self):
-        if self._profiles is None:
-            self._profiles_matrices()
-        return self._profiles
-
-    def dv_profiles(self):
-        if self._dv_profiles is None:
-            self._profiles_matrices()
-        return self._dv_profiles
-
-    def matrices(self):
-        if self._matrices is None:
-            self._profiles_matrices()
-        return self._matrices
-
-    @staticmethod
-    def q99(x): return np.percentile(x, 99)
-
-    def _profiles_matrices(self):
-        profiles = []
-        dv_profiles = []
-        matrices = []
-
-        cells = self.cells()
-        cells_mf = cells[(cells['cy'] >= -3) & (cells['cy'] <= 3)]
-        cells_clean = self.cells_clean()
-        cells_mf_clean = cells_clean[(cells_clean['cy'] >= -3) & (cells_clean['cy'] <= 3)]
-
-        cx = cells_clean['cx'].round().astype('int')
-        cy = cells_clean['cy'].round().astype('int')
-        profile = cells_clean.groupby(cy)['mCherry'].agg([np.mean, self.q99])
-        profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
-        matrix = cells_clean.groupby([cx, cy])['mCherry', 'ext_mCherry'].agg(
-            {'mCherry': [np.mean, np.max], 'ext_mCherry': np.max})
-        matrix.columns = ['mean', 'max', 'ext']
-        matrices.append(pd.concat([matrix], keys=['AtoClean'], names=['Gene']))
-        cx = cells_mf_clean['cx'].round().astype('int')
-        profile = cells_mf_clean.groupby(cx)['mCherry'].agg([np.mean, self.q99])
-        dv_profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
-
-        cx = cells['cx'].round().astype('int')
-        cy = cells['cy'].round().astype('int')
-        profile = cells.groupby(cy)['mCherry'].agg([np.mean, self.q99])
-        profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
-        matrix = cells.groupby([cx, cy])['mCherry', 'ext_mCherry'].agg(
-            {'mCherry': [np.mean, np.max], 'ext_mCherry': np.max})
-        matrix.columns = ['mean', 'max', 'ext']
-        matrices.append(pd.concat([matrix], keys=['Ato'], names=['Gene']))
-
-        profile = cells.groupby(['Gene', cy])['Venus'].agg([np.mean, self.q99])
-        profiles.append(profile)
-
-        matrix = cells.groupby(['Gene', cx, cy])['Venus', 'ext_Venus'].agg(
-            {'Venus': [np.mean, np.max], 'ext_Venus': np.max})
-        matrix.columns = ['mean', 'max', 'ext']
-        matrices.append(matrix)
-
-        cx = cells_mf['cx'].round().astype('int')
-        profile = cells_mf.groupby(cx)['mCherry'].agg([np.mean, self.q99])
-        dv_profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
-        profile = cells_mf.groupby(['Gene', cx])['Venus'].agg([np.mean, self.q99])
-        dv_profiles.append(profile)
-
-        self._profiles = pd.concat(profiles)
-        self._dv_profiles = pd.concat(dv_profiles)
-        self._matrices = pd.concat(matrices)
-
-
 class Figure_3d51(Figure):
 
     class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, SmoothProfilePlot, APProfilePlot, LabeledPlot):
@@ -630,11 +466,152 @@ class Figure_79eb(Figure_3d51):
         Figure.plot(self)
 
 
+    # def plot(self):
+    #
+    #     def plot_centroids(s_centroids, g_centroids, name):
+    #         fig = plt.figure(figsize=[5, 5])
+    #         ax = fig.add_subplot(1, 1, 1)
+    #         c_centroids = s_centroids.loc[s_centroids['Cluster'] != 0]
+    #         ax.scatter(c_centroids['cy'], c_centroids['mCherry'], c=c_centroids['Cluster'], s=160, cmap='rainbow')
+    #         ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c=s_centroids['ext_mCherry'])
+    #         ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='green', s=80, marker='D')
+    #         if self.outdir is None:
+    #             fig.show()
+    #         else:
+    #             fig.savefig(os.path.join(self.outdir, self.basename + '_' + name + '.png'))
+    #
+    #     def plot_samples(method):
+    #         samples = self.cells.sort_values('Gene')['Sample'].unique()
+    #         n_samples = len(samples)
+    #         fig = plt.figure(figsize=[3 * 3, 3 * n_samples])
+    #         gs = gridspec.GridSpec(n_samples, 1)
+    #         g_centroids = self.cells.groupby('Cluster_' + method)[self.C_FEATURES].mean()
+    #         for index, sample in enumerate(samples):
+    #             cells = self.cells.loc[self.cells['Sample'] == sample].sort_values(by=['mCherry'])
+    #             gene = cells['Gene'].unique()[0]
+    #             s_centroids = cells.groupby('Cluster_' + method)[self.C_FEATURES].mean()
+    #             sgs = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[index])
+    #             ax = fig.add_subplot(sgs[0])
+    #             ax.scatter(cells['cx'], cells['cy'], c=cells['Cluster_' + method], cmap='rainbow')
+    #             ax.set_xlim(0, 80)
+    #             ax.set_ylim(10, -10)
+    #             ax.text(0.025, 0.95, sample + ' ' + gene, horizontalalignment='left', verticalalignment='top',
+    #                     fontsize=18, color='black', transform=ax.transAxes)
+    #             ax = fig.add_subplot(sgs[1])
+    #             ax.scatter(cells['cx'], cells['cy'], c=cells['mCherry'])
+    #             ax.set_xlim(0, 80)
+    #             ax.set_ylim(10, -10)
+    #             ax = fig.add_subplot(sgs[2])
+    #             ax.scatter(cells['cy'], cells['mCherry'], c=cells['Cluster_' + method], s=160, cmap='rainbow')
+    #             ax.scatter(cells['cy'], cells['mCherry'], c=cells['ext_mCherry'])
+    #             ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='magenta', s=80, marker='D')
+    #             ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c='yellow', s=80, marker='D')
+    #             ax.set_xlim(-10, 10)
+    #             ax.set_ylim(0, 4)
+    #         if self.outdir is None:
+    #             fig.show()
+    #         else:
+    #             fig.savefig(os.path.join(self.outdir, self.basename + '_' + method + '_samples.png'))
+    #
+    #     def sorted_legend(handles, labels=None):
+    #         if labels is None:
+    #             handles, labels = handles
+    #         hl = sorted(zip(handles, labels), key=operator.itemgetter(1))
+    #         handles2, labels2 = zip(*hl)
+    #         labels3 = [l.replace(' 0', ' ') for l in labels2]
+    #         return handles2, labels3
+    #
+    #     def h_cluster_dendrogram(z, ax, c_colors):
+    #         dd = dendrogram(
+    #             z,
+    #             truncate_mode='lastp',  # show only the last p merged clusters
+    #             p=self.k,               # show only the last p merged clusters
+    #             leaf_rotation=90.,      # rotates the x axis labels
+    #             leaf_font_size=8,       # font size for the x axis labels
+    #             show_contracted=True,   # to get a distribution impression in truncated branches
+    #             ax=ax,
+    #             link_color_func=lambda c: 'black'
+    #         )
+    #         ax.set_xticklabels(['Cluster %d' % c for c in range(1, len(ax.get_xmajorticklabels()) + 1)])
+    #         x_lbls = ax.get_xmajorticklabels()
+    #         num = -1
+    #         for lbl in x_lbls:
+    #             num += 1
+    #             lbl.set_color(c_colors(num))
+    #         return dd
+    #
+    #     plot_centroids(self.centroids.loc[idx[:, method], :], centroids, method + '_centroids')
+    #     plot_centroids(
+    #         self.cells.groupby(['Sample', 'Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
+    #             .rename(columns={'Cluster_' + method: 'Cluster'}),
+    #         self.cells.groupby(['Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
+    #             .rename(columns={'Cluster_' + method: 'Cluster'}),
+    #             method + '_sample_centroids')
+    #
+    #     # fig = plt.figure(figsize=[10, 10])
+    #     # ax = fig.add_subplot(2, 2, 1)
+    #     # ax_xi = fig.add_subplot(2, 2, 2)
+    #     # ax_xy = fig.add_subplot(2, 2, 4)
+    #
+    #     # cells.loc[cells.groupby('Cluster')['Cluster'].transform('count').sort_values(ascending=False).index]
+    #
+    #     # clusters = cells.groupby('Cluster')['cx'].count().sort_values(ascending=False).index.tolist()
+    #     # c_colors = plt.cm.get_cmap("gist_rainbow", len(clusters))
+    #     # h_cluster_dendrogram(z, ax, c_colors)
+    #     #
+    #     # for cluster in clusters:
+    #     #     if cluster == 0:
+    #     #         continue
+    #     #     c_cells = cells[cells['Cluster'] == cluster]
+    #     #     c_count = c_cells['Cluster'].count()
+    #     #     label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
+    #     #     ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
+    #     #     ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
+    #     #
+    #     # handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
+    #     # ax = fig.add_subplot(2, 2, 3)
+    #     # ax.set_axis_off()
+    #     # ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
+    #     #
+    #     # filename = id + '_' + method + '_' + str(self.k) + '.png'
+    #     # fig.savefig(os.path.join(outdir, filename))
+    #     # plt.close(fig)
+    #     #
+    #     # samples = cells['Sample'].unique().tolist()
+    #     # for sample in samples:
+    #     #     fig = plt.figure(figsize=[10, 10])
+    #     #     ax_xyi = fig.add_subplot(2, 2, 1)
+    #     #     ax_xi = fig.add_subplot(2, 2, 4)
+    #     #     ax_xy = fig.add_subplot(2, 2, 2)
+    #     #     s_cells = cells[cells['Sample'] == sample].sort_values('mCherry')
+    #     #     ax_xyi.scatter(s_cells['cx'], s_cells['cy'], c=s_cells['mCherry'])
+    #     #     for cluster in clusters:
+    #     #         c_cells = s_cells[s_cells['Cluster'] == cluster]
+    #     #         c_count = c_cells['Cluster'].count()
+    #     #         label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
+    #     #         ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
+    #     #         ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
+    #     #     handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
+    #     #     ax = fig.add_subplot(2, 2, 3)
+    #     #     ax.set_axis_off()
+    #     #     ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
+    #     #     filename = id + '_' + method + '_' + str(self.k) + '_' + sample + '.png'
+    #     #     fig.savefig(os.path.join(outdir, filename))
+    #     #     plt.close(fig)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot all data.')
     parser.add_argument('--data', required=True)
     parser.add_argument('--log')
     parser.add_argument('--outdir')
+    parser.add_argument('--clusters')
+    parser.add_argument('--samples')
+    parser.add_argument('--repeats')
+    parser.add_argument('--cutoff')
+    parser.add_argument('--reproducible', dest='reproducible', action='store_true')
+    parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
+    parser.set_defaults(reproducible=False)
     args = parser.parse_args()
 
     if args.log:
@@ -642,10 +619,12 @@ if __name__ == "__main__":
         logging.getLogger('PIL.Image').setLevel(logging.INFO)
         logging.getLogger('matplotlib').setLevel(logging.INFO)
         logging.getLogger('joblib').setLevel(logging.INFO)
+        logging.getLogger('cloudpickle').setLevel(logging.INFO)
+
+    if args.reproducible:
+        np.random.seed(0)
+    else:
+        np.random.seed()
 
     data = DiscData(args)
-    #fig_3d51 = Figure_3d51(data)
-    #fig_3d51.show()
-    #fig_76eb = Figure_79eb(data)
-    #fig_76eb.show()
-
+    clustering = Clustering(data, args=args)
