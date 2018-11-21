@@ -275,7 +275,7 @@ class Clustering:
                 clusters = self.clusters.loc[idx[:, method, :], :]
             else:
                 clusters = self.clusters.loc[idx[:, method, :], :]\
-                    .join(self.centroids.loc[self.centroids['Distance'] < float(cutoff), 'Distance'],
+                    .join(self.centroids.loc[self.centroids['Distance'] < cutoff, 'Distance'],
                           on=['SampleSet', 'Method', 'LocalCluster'], how='right')
             global_clusters = clusters.groupby('Cell')['Cluster'].agg(cluster_mode)
             global_clusters.drop(global_clusters[global_clusters == 0].index, inplace=True)
@@ -379,10 +379,10 @@ if __name__ == "__main__":
     parser.add_argument('--data', required=True)
     parser.add_argument('--log')
     parser.add_argument('--outdir')
-    parser.add_argument('-k', '--clusters', dest='k')
-    parser.add_argument('-n', '--samples', dest='n')
-    parser.add_argument('-r', '--repeats', dest='r')
-    parser.add_argument('--cutoff')
+    parser.add_argument('-k', '--clusters', dest='k', type=int)
+    parser.add_argument('-n', '--samples', dest='n', type=int)
+    parser.add_argument('-r', '--repeats', dest='r', type=int)
+    parser.add_argument('--cutoff', type=float)
     parser.add_argument('--reproducible', dest='reproducible', action='store_true')
     parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
     parser.set_defaults(reproducible=False)
