@@ -37,6 +37,7 @@ class DiscData:
             if cells.empty:
                 raise RuntimeError("No data was found in specified file!")
             self._cells = cells
+            self._source = datafile
             return True
         except RuntimeError:
             return False
