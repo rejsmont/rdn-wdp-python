@@ -466,6 +466,12 @@ class Figure_79eb(Figure_3d51):
         Figure.plot(self)
 
 
+class Figure9d28(Figure):
+
+    def plot(self, outdir):
+
+        Figure.plot(self)
+
     # def plot(self):
     #
     #     def plot_centroids(s_centroids, g_centroids, name):
@@ -605,10 +611,10 @@ if __name__ == "__main__":
     parser.add_argument('--data', required=True)
     parser.add_argument('--log')
     parser.add_argument('--outdir')
-    parser.add_argument('--clusters')
-    parser.add_argument('--samples')
-    parser.add_argument('--repeats')
-    parser.add_argument('--cutoff')
+    parser.add_argument('-k', '--clusters', dest='k', type=int, default=6)
+    parser.add_argument('-n', '--samples', dest='n', type=int, default=20)
+    parser.add_argument('-r', '--repeats', dest='r', type=int, default=100)
+    parser.add_argument('--cutoff', type=float, default=1.0)
     parser.add_argument('--reproducible', dest='reproducible', action='store_true')
     parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
     parser.set_defaults(reproducible=False)
@@ -626,5 +632,5 @@ if __name__ == "__main__":
     else:
         np.random.seed()
 
-    data = DiscData(args)
-    clustering = Clustering(data, args=args)
+    data = DiscData(args.data)
+    clustering = Clustering(args.data, disc_data=data, args=args)

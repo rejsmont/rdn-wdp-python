@@ -5,16 +5,12 @@ import logging
 import os
 import numpy as np
 import pandas as pd
-import matplotlib
-#matplotlib.use('agg')
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.cluster.hierarchy import linkage
 from scipy.cluster.hierarchy import fcluster
 from scipy.spatial.distance import cdist
 from scipy import stats
 from sklearn.ensemble import RandomForestClassifier
-import operator
+import warnings
 import hashlib
 import statistics
 import yaml
@@ -28,6 +24,8 @@ class Clustering:
     C_FEATURES = ['cy', 'mCherry', 'ext_mCherry']
     FEATURES = ['cx', 'cy', 'cz', 'mCherry', 'ext_mCherry', 'ang_max_mCherry', 'Volume']
 
+    _source = None
+    clean = True
     data: DiscData = None
     cells: pd.DataFrame = None
     centroids: pd.DataFrame = None
@@ -45,24 +43,31 @@ class Clustering:
     computed = False
     outdir = None
 
-    def __init__(self, data, **kwargs):
+    def __init__(self, data, disc_data=None, **kwargs):
+        print("Input is", data)
+        self.data = disc_data
         initialized = self.from_data(data) or self.from_csv(data) or self.from_yml(data)
         if not initialized:
             raise RuntimeError("Failed to initialize Clustering class")
         self.init_params(**kwargs)
 
     def from_csv(self, datafile):
+        print("Trying from CSV", datafile)
+        self._source = datafile
         try:
-            return self.from_data(DiscData(datafile))
+            return self.from_data(DiscData(datafile, try_metadata=False))
         except RuntimeError:
             return False
 
     def from_yml(self, datafile):
+        print("Trying from YML", datafile)
+        self._source = datafile
         with open(datafile, 'r') as stream:
             metadata = yaml.safe_load(stream)
             return self.from_metadata(metadata)
 
     def from_data(self, data):
+        print("Trying from DiscData", data)
         if isinstance(data, DiscData):
             self.data = data
             self.can_compute = self.init_cells()
@@ -70,16 +75,17 @@ class Clustering:
         return False
 
     def from_metadata(self, metadata):
-
+        print("Trying from metadata")
         def explore(func, path, basedir=None, **kwargs):
             if basedir is None:
                 paths = [path, os.path.basename(path)]
             else:
                 path = os.path.basename(path)
-                paths = [path, os.path.join(basedir, path)]
+                paths = [path, os.path.join(basedir, path), os.path.join(os.path.dirname(self._source), path)]
             result = None
             for path in paths:
                 try:
+                    print("Trying", path)
                     result = func(path, **kwargs)
                 except:
                     continue
@@ -87,17 +93,20 @@ class Clustering:
             return result
 
         def valid(df):
-            return df is not None and ((isinstance(df, pd.DataFrame) and not df.empty) or df)
+            return df is not None and ((isinstance(df, pd.DataFrame) and not df.empty) or bool(df))
 
         if metadata is None:
             return False
 
-        self.data = explore(DiscData, metadata['input']['cells'], metadata['input']['dir'])
-        self.cells = explore(pd.read_csv, metadata['output']['cells'], metadata['output']['dir'], index_col=0)
-        self.centroids = explore(pd.read_csv, metadata['output']['centroids'], metadata['output']['dir'],
-                                 index_col=[0, 1, 2])
-        self.clusters = explore(pd.read_csv, metadata['output']['clusters'], metadata['output']['dir'],
-                                index_col=[0, 1, 2])
+        if self.data is None:
+            self.data = explore(DiscData, metadata['input']['cells'], metadata['input']['dir'])
+        with warnings.catch_warnings():
+            warnings.simplefilter(action='ignore', category=FutureWarning)
+            self.cells = explore(pd.read_csv, metadata['output']['cells'], metadata['output']['dir'], index_col=0)
+            self.centroids = explore(pd.read_csv, metadata['output']['centroids'], metadata['output']['dir'],
+                                     index_col=[0, 1, 2])
+            self.clusters = explore(pd.read_csv, metadata['output']['clusters'], metadata['output']['dir'],
+                                    index_col=[0, 1, 2])
         self.sample_sets = metadata['classification']['sets']
         params = {
             'outdir': metadata['output']['dir'],
@@ -117,7 +126,10 @@ class Clustering:
 
     def init_cells(self, override=False):
         if (override or self.cells is None or self.cells.empty) and self.data is not None:
-            self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
+            if self.clean:
+                self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
+            else:
+                self.cells = self.data.cells()[self.data.furrow_mask()].dropna()
             if override:
                 self.computed = False
         if self.cells is not None and not self.cells.empty:
@@ -385,11 +397,11 @@ if __name__ == "__main__":
     parser.add_argument('--cutoff', type=float)
     parser.add_argument('--reproducible', dest='reproducible', action='store_true')
     parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
+    parser.add_argument('--clean', dest='clean', action='store_true')
     parser.set_defaults(reproducible=False)
+    parser.set_defaults(clean=False)
 
     args = parser.parse_args()
-
-    print(args)
 
     if args.log:
         logging.basicConfig(level=args.log.upper())

@@ -37,7 +37,6 @@ from shapely.geometry import Polygon
 # e170
 # 1718
 # 7895
-# 9d28
 
 
 def disc_matrix(disc, field, method='max'):

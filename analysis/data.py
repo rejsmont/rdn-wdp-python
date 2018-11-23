@@ -2,17 +2,18 @@
 
 import numpy as np
 import pandas as pd
+import os
 import warnings
+import yaml
 
 
 class DiscData:
 
-    def __init__(self, datafile):
-        self._source = datafile
-        with warnings.catch_warnings():
-            warnings.simplefilter(action='ignore', category=FutureWarning)
-            self._cells = pd.read_csv(self._source, index_col=0)
-        if self._cells.empty:
+    _source = None
+    _cells: pd.DataFrame = None
+
+    def __init__(self, data, try_metadata=True):
+        if not self.from_csv(data) and not (try_metadata and self.from_yml(data)):
             raise RuntimeError("No data was found in specified file!")
         self._cells_clean = None
         self._cells_background = None
@@ -27,6 +28,49 @@ class DiscData:
         self._clean_mask = None
         self._background_mask = None
         self._furrow_mask = None
+
+    def from_csv(self, datafile):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter(action='ignore', category=FutureWarning)
+                cells = pd.read_csv(datafile, index_col=0)
+            if cells.empty:
+                raise RuntimeError("No data was found in specified file!")
+            self._cells = cells
+            return True
+        except RuntimeError:
+            return False
+
+    def from_yml(self, datafile):
+        self._source = datafile
+        with open(datafile, 'r') as stream:
+            metadata = yaml.safe_load(stream)
+            return self.from_metadata(metadata)
+
+    def from_metadata(self, metadata):
+
+        def explore(func, path, basedir=None, **kwargs):
+            if basedir is None:
+                paths = [path, os.path.basename(path)]
+            else:
+                path = os.path.basename(path)
+                paths = [path, os.path.join(basedir, path), os.path.join(os.path.dirname(self._source), path)]
+            result = None
+            for path in paths:
+                try:
+                    result = func(path, **kwargs)
+                except:
+                    continue
+                break
+            return result
+
+        def valid(df):
+            return df is not None and ((isinstance(df, pd.DataFrame) and not df.empty) or df)
+
+        if metadata is None:
+            return False
+
+        return explore(self.from_csv, metadata['input']['cells'], metadata['input']['dir']) and valid(self._cells)
 
     def clean_up(self):
         # Remove artifact from sample ZBO7IH
@@ -81,14 +125,14 @@ class DiscData:
 
     def cells_ato(self):
         if self._cells_ato is None:
-            cells = self._cells()
+            cells = self.cells()
             background = self.cells_background()
             self._cells_ato = cells[(cells['mCherry'] > background['mCherry'].quantile(0.90))]
         return self._cells_ato
 
     def cells_no_ato(self):
         if self._cells_no_ato is None:
-            cells = self._cells()
+            cells = self.cells()
             background = self.cells_background()
             self._cells_no_ato = cells[(cells['mCherry'] < background['mCherry'].quantile(0.50))]
         return self._cells_no_ato
