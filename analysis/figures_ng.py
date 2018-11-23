@@ -11,7 +11,9 @@ import matplotlib.ticker as ticker
 #matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from scipy import stats
 from scipy.signal import savgol_filter
+from scipy.cluster.hierarchy import dendrogram as dng, linkage
 from data import DiscData
 from clustering import Clustering
 
@@ -41,7 +43,7 @@ class Figure:
             self.plot()
         self.fig.savefig(path)
 
-    def plot(self, outdir):
+    def plot(self):
         self.plotted = True
         pass
 
@@ -327,7 +329,7 @@ class Figure_3d51(Figure):
     def __init__(self, data):
         super().__init__(data)
 
-    def plot(self, outdir):
+    def plot(self):
         self.fig = plt.figure(figsize=(15, 5 * 2.67))
         self.gs = gridspec.GridSpec(2, 1, height_ratios=[25, 9])
         #self.gs = gridspec.GridSpec(6, 3, height_ratios=[2, 2, 2, 1, 2, 1])
@@ -412,7 +414,7 @@ class Figure_79eb(Figure_3d51):
         self.genes.remove('ato')
         self.rows = math.ceil(len(self.genes) / self.columns)
 
-    def plot(self, outdir):
+    def plot(self):
         e = 1 if (len(self.genes) % self.columns == 0) else 0
         rows = self.rows + e
         self.fig = plt.figure(figsize=(16 * self.columns, rows * 2.67))
@@ -463,14 +465,49 @@ class Figure_79eb(Figure_3d51):
         for pid, plot in enumerate(plots):
             pos = igs[pid] if pid < 3 else igs[:, -1]
             plot.legend(pos)
-        Figure.plot(self)
-
+        super().plot()
 
 class Figure9d28(Figure):
 
-    def plot(self, outdir):
+    data: Clustering = None
 
-        Figure.plot(self)
+    def plot(self):
+
+        def dendrogram(data, position, z_score=False):
+            values = data[Clustering.C_FEATURES].values
+            if z_score:
+                values = stats.zscore(values, axis=0)
+            matrix = linkage(values, method='ward')
+            ax = self.fig.add_subplot(self.gs[position])
+            dng(matrix, labels=data['Name'].values, ax=ax, leaf_rotation=30)
+
+        def centroids(s, g, position):
+            ax = self.fig.add_subplot(self.gs[position])
+            idx = pd.IndexSlice
+            c = s.loc[s['Cluster'] != 0]
+            ax.scatter(c['cy'], c['mCherry'], c=c['Cluster'], s=160, cmap='rainbow')
+            ax.scatter(s['cy'], s['mCherry'], c=s['ext_mCherry'])
+            ax.scatter(g['cy'], g['mCherry'], c='yellow', s=80, marker='D')
+            ax.scatter(g['cy'], g['mCherry'], c='black', s=20, marker='D')
+
+        idx = pd.IndexSlice
+        self.fig = plt.figure(figsize=(10, 10))
+        self.gs = gridspec.GridSpec(2, 2)
+
+        s_centroids = self.data.centroids.loc[idx[:'global', :, :], :]
+        g_centroids = self.data.centroids.loc[idx['global', :, :], :]
+        dendrogram(g_centroids, 0)
+        centroids(s_centroids, g_centroids, 1)
+
+        s_centroids = self.data.cells.groupby(['Sample', 'Cluster_ward'], as_index=False)[Clustering.C_FEATURES].mean()\
+            .rename(columns={'Cluster_ward': 'Cluster'})
+        g_centroids = self.data.cells.groupby(['Cluster_ward'], as_index=False)[Clustering.C_FEATURES].mean()\
+            .rename(columns={'Cluster_ward': 'Cluster'})\
+            .join(self.data.centroids.xs(('global', 'ward'))['Name'], on='Cluster')
+        dendrogram(g_centroids, 2, z_score=True)
+        centroids(s_centroids, g_centroids, 3)
+
+        super().plot()
 
     # def plot(self):
     #
@@ -634,3 +671,6 @@ if __name__ == "__main__":
 
     data = DiscData(args.data)
     clustering = Clustering(args.data, disc_data=data, args=args)
+
+    fig = Figure9d28(clustering)
+    fig.show()

@@ -321,7 +321,7 @@ class Clustering:
             named_clusters = named_clusters.drop(cluster_f)
             index = pd.MultiIndex.from_tuples([cluster_a, cluster_b, cluster_c, cluster_d, cluster_e, cluster_f],
                                               names=['SampleSet', 'Method', 'Cluster'])
-            names = pd.DataFrame(['R8', 'MF high', 'post MF', 'pre MF', 'MF ato', 'MF background'],
+            names = pd.DataFrame(['R8', 'MF-high', 'post-MF', 'pre-MF', 'MF-ato', 'MF'],
                                  index=index, columns=['Name'])
             self.centroids = self.centroids.join(names.xs(('global', self.method)), on='Cluster')
 
