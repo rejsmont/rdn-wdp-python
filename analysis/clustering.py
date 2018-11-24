@@ -25,7 +25,7 @@ class Clustering:
     FEATURES = ['cx', 'cy', 'cz', 'mCherry', 'ext_mCherry', 'ang_max_mCherry', 'Volume']
 
     _source = None
-    clean = True
+    clean = None
     data: DiscData = None
     cells: pd.DataFrame = None
     centroids: pd.DataFrame = None
@@ -126,9 +126,11 @@ class Clustering:
 
     def init_cells(self, override=False):
         if (override or self.cells is None or self.cells.empty) and self.data is not None:
-            if self.clean:
+            if self.clean or self.clean is None:
+                print("Using only clean cells...")
                 self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
             else:
+                print("Using all cells...")
                 self.cells = self.data.cells()[self.data.furrow_mask()].dropna()
             if override:
                 self.computed = False
