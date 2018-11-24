@@ -148,6 +148,7 @@ class Clustering:
                     if key != 'outdir' and self.computed and getattr(self, key) != value:
                         self.computed = False
                     setattr(self, key, value)
+                    print("Setting", key, "to", value)
                     break
 
     def reset(self):
@@ -417,6 +418,8 @@ if __name__ == "__main__":
         np.random.seed(0)
     else:
         np.random.seed()
+
+    print(args)
 
     clustering = Clustering(args.data, args=args)
     clustering.compute()
