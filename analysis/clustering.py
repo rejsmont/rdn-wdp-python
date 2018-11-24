@@ -140,7 +140,7 @@ class Clustering:
         return False
 
     def init_params(self, **kwargs):
-        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir']
+        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir', 'clean']
         args = kwargs.pop('args', argparse.Namespace())
         for key in allowed:
             for value in [kwargs.get(key, None), getattr(args, key, None)]:
@@ -148,7 +148,6 @@ class Clustering:
                     if key != 'outdir' and self.computed and getattr(self, key) != value:
                         self.computed = False
                     setattr(self, key, value)
-                    print("Setting", key, "to", value)
                     break
 
     def reset(self):
