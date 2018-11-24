@@ -46,6 +46,7 @@ class Clustering:
     def __init__(self, data, disc_data=None, **kwargs):
         print("Input is", data)
         self.data = disc_data
+        self.init_params(**kwargs)
         initialized = self.from_data(data) or self.from_csv(data) or self.from_yml(data)
         if not initialized:
             raise RuntimeError("Failed to initialize Clustering class")
