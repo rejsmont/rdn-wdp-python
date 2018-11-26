@@ -9,6 +9,9 @@ import yaml
 
 class DiscData:
 
+    FURROW_MIN = -8.0
+    FURROW_MAX = 8.0
+
     _source = None
     _cells: pd.DataFrame = None
 
@@ -97,7 +100,7 @@ class DiscData:
 
     def furrow_mask(self):
         if self._furrow_mask is None:
-            self._furrow_mask = (self._cells['cy'] >= -10) & (self._cells['cy'] <= 10)
+            self._furrow_mask = (self._cells['cy'] >= self.FURROW_MIN) & (self._cells['cy'] <= self.FURROW_MAX)
         return self._furrow_mask
 
     def background_mask(self):

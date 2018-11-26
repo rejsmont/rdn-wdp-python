@@ -467,6 +467,7 @@ class Figure_79eb(Figure_3d51):
             plot.legend(pos)
         super().plot()
 
+
 class Figure9d28(Figure):
 
     data: Clustering = None
@@ -506,6 +507,20 @@ class Figure9d28(Figure):
             .join(self.data.centroids.xs(('global', 'ward'))['Name'], on='Cluster')
         dendrogram(g_centroids, 2, z_score=True)
         centroids(s_centroids, g_centroids, 3)
+
+        super().plot()
+
+
+class Figure7895(Figure):
+
+    data: Clustering = None
+
+    def plot(self):
+        idx = pd.IndexSlice
+        self.fig = plt.figure(figsize=(10, 10))
+        self.gs = gridspec.GridSpec(2, 2)
+
+
 
         super().plot()
 
@@ -672,5 +687,8 @@ if __name__ == "__main__":
     data = DiscData(args.data)
     clustering = Clustering(args.data, disc_data=data, args=args)
 
-    fig = Figure9d28(clustering)
-    fig.show()
+    fig9d28 = Figure9d28(clustering)
+    fig9d28.show()
+
+    fig7895 = Figure9d28(clustering)
+    fig7895.show()
