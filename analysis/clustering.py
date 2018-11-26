@@ -26,6 +26,7 @@ class Clustering:
 
     _source = None
     clean = None
+    train_clean = None
     data: DiscData = None
     cells: pd.DataFrame = None
     centroids: pd.DataFrame = None
@@ -114,9 +115,11 @@ class Clustering:
             'k': metadata['clustering']['clusters'],
             'method': metadata['clustering']['method'],
             'metric': metadata['clustering']['metric'],
+            'train_clean': metadata['clustering']['clean'],
             'cutoff': metadata['classification']['cutoff'],
             'n': metadata['classification']['samples'],
             'r': metadata['classification']['repeats'],
+            'clean': metadata['classification']['clean']
         }
         self.init_params(**params)
         self.can_compute = self.init_cells()
@@ -128,10 +131,10 @@ class Clustering:
     def init_cells(self, override=False):
         if (override or self.cells is None or self.cells.empty) and self.data is not None:
             if self.clean or self.clean is None:
-                print("Using only clean cells...")
+                print("Will classify only clean cells...")
                 self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
             else:
-                print("Using all cells...")
+                print("Will classify all cells...")
                 self.cells = self.data.cells()[self.data.furrow_mask()].dropna()
             if override:
                 self.computed = False
@@ -140,7 +143,7 @@ class Clustering:
         return False
 
     def init_params(self, **kwargs):
-        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir', 'clean']
+        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir', 'clean', 'train_clean']
         args = kwargs.pop('args', argparse.Namespace())
         for key in allowed:
             for value in [kwargs.get(key, None), getattr(args, key, None)]:
@@ -167,7 +170,11 @@ class Clustering:
         self.reset()
 
         def get_samples(n, unique=False):
-            samples = self.cells[['Sample', 'Gene']].drop_duplicates().values.tolist()
+            if self.train_clean:
+                clean = self.cells['Gene'].isin(self.data.genes_clean())
+                samples = self.cells.loc[clean, ['Sample', 'Gene']].drop_duplicates().values.tolist()
+            else:
+                samples = self.cells[['Sample', 'Gene']].drop_duplicates().values.tolist()
             selected = []
             genes = []
             while len(selected) < n:
@@ -371,11 +378,13 @@ class Clustering:
                 'cells': self.cells_filename()
             },
             'clustering': {
+                'clean': self.train_clean or self.clean,
                 'method': self.method,
                 'metric': self.metric,
                 'clusters': self.k,
             },
             'classification': {
+                'clean': self.clean,
                 'samples': self.n,
                 'repeats': self.r,
                 'cutoff': self.cutoff,
@@ -401,8 +410,10 @@ if __name__ == "__main__":
     parser.add_argument('--reproducible', dest='reproducible', action='store_true')
     parser.add_argument('--not-reproducible', dest='reproducible', action='store_false')
     parser.add_argument('--clean', dest='clean', action='store_true')
+    parser.add_argument('--train-clean', dest='train_clean', action='store_true')
     parser.set_defaults(reproducible=False)
     parser.set_defaults(clean=False)
+    parser.set_defaults(train_clean=False)
 
     args = parser.parse_args()
 
