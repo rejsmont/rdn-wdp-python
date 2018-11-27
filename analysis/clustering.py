@@ -43,6 +43,7 @@ class Clustering:
     can_compute = False
     computed = False
     outdir = None
+    prefix = None
 
     def __init__(self, data, disc_data=None, **kwargs):
         print("Input is", data)
@@ -346,9 +347,9 @@ class Clustering:
     def base_filename(self):
         base_name = 'k' + str(self.k) + 'n' + str(self.n) + 'r' + str(self.r)
         if self.cutoff == -1:
-            return base_name
+            return str(self.prefix) + base_name
         else:
-            return 'c' + str(round(self.cutoff*100)) + base_name
+            return str(self.prefix) + 'c' + str(round(self.cutoff*100)) + base_name
 
     def clusters_filename(self):
         return self.base_filename() + '_' + 'clusters.csv'
@@ -403,6 +404,7 @@ if __name__ == "__main__":
     parser.add_argument('--data', required=True)
     parser.add_argument('--log')
     parser.add_argument('--outdir')
+    parser.add_argument('--prefix')
     parser.add_argument('-k', '--clusters', dest='k', type=int)
     parser.add_argument('-n', '--samples', dest='n', type=int)
     parser.add_argument('-r', '--repeats', dest='r', type=int)
