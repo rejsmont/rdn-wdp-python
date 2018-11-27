@@ -111,15 +111,15 @@ class Clustering:
                                     index_col=[0, 1, 2])
         self.sample_sets = metadata['classification']['sets']
         params = {
-            'outdir': metadata['output']['dir'],
-            'k': metadata['clustering']['clusters'],
-            'method': metadata['clustering']['method'],
-            'metric': metadata['clustering']['metric'],
-            'train_clean': metadata['clustering']['clean'],
-            'cutoff': metadata['classification']['cutoff'],
-            'n': metadata['classification']['samples'],
-            'r': metadata['classification']['repeats'],
-            'clean': metadata['classification']['clean']
+            'outdir': metadata['output'].get('dir', None),
+            'k': metadata['clustering'].get('clusters', None),
+            'method': metadata['clustering'].get('method', None),
+            'metric': metadata['clustering'].get('metric', None),
+            'train_clean': metadata['clustering'].get('clean', None),
+            'cutoff': metadata['classification'].get('cutoff', None),
+            'n': metadata['classification'].get('samples', None),
+            'r': metadata['classification'].get('repeats', None),
+            'clean': metadata['classification'].get('clean', None)
         }
         self.init_params(**params)
         self.can_compute = self.init_cells()

@@ -10,6 +10,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
 #matplotlib.use('agg')
 import matplotlib.pyplot as plt
+import os
 from matplotlib import colors
 from scipy import stats
 from scipy.signal import savgol_filter
@@ -514,148 +515,97 @@ class Figure9d28(Figure):
 class Figure7895(Figure):
 
     data: Clustering = None
+    gene = None
+    plots = {}
+
+    def __init__(self, data, gene=None):
+        self.gene = gene
+        super().__init__(data)
+        if self.gene is None:
+            genes = self.data.cells['Gene'].unique().tolist()
+            for gene in sorted(genes):
+                self.plots[gene] = Figure7895(data, gene)
+
+    def close(self):
+        plt.close(self.fig)
 
     def plot(self):
-        idx = pd.IndexSlice
-        self.fig = plt.figure(figsize=(10, 10))
-        self.gs = gridspec.GridSpec(2, 2)
+        if self.gene is None:
+            for plot in self.plots.values():
+                plot.plot()
+        else:
+            return self.plot_gene()
 
+    def show(self, gene=None, close=True):
+        if self.gene is None:
+            if gene is not None:
+                self.plots[gene].show()
+                if close:
+                    self.plots[gene].close()
+            else:
+                for plot in self.plots.values():
+                    plot.show()
+                    if close:
+                        plot.close()
+        else:
+            return super().show()
 
+    def save(self, path, gene=None, close=True):
+        if self.gene is None:
+            if gene is not None:
+                self.plots[gene].save(path)
+                if close:
+                    self.plots[gene].close()
+            else:
+                dirname = os.path.dirname(path)
+                for gene, plot in self.plots.items():
+                    extension, basename = os.path.splitext(os.path.basename(path))
+                    plot.save(os.path.join(dirname, basename + '_' + gene + extension))
+                    if close:
+                        plot.close()
+        else:
+            return super().save(path)
+
+    def plot_gene(self):
+        filter = self.data.cells['Gene'] == self.gene
+        samples = self.data.cells.loc[filter, 'Sample'].unique()
+        n_samples = len(samples)
+        rows = math.ceil(n_samples / 2.0)
+        self.fig = plt.figure(figsize=(18, 3*rows))
+        self.gs = gridspec.GridSpec(rows, 2)
+
+        column = 'Cluster_' + self.data.method
+        g_centroids = self.data.cells.groupby(column)[Clustering.C_FEATURES].mean()
+
+        def plot_sample(sample, ss):
+            filter = self.data.cells['Sample'] == sample
+            cells = self.data.cells.loc[filter].sort_values(by=['mCherry'])
+
+            gene = cells['Gene'].unique()[0]
+            s_centroids = cells.groupby(column)[Clustering.C_FEATURES].mean()
+            gs = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=ss)
+            ax = self.fig.add_subplot(gs[0])
+            ax.scatter(cells['cx'], cells['cy'], c=cells[column], cmap='rainbow')
+            ax.set_xlim(0, 80)
+            ax.set_ylim(DiscData.FURROW_MAX, DiscData.FURROW_MIN)
+            ax.text(0.025, 0.95, sample + ' ' + gene, horizontalalignment='left', verticalalignment='top',
+                    fontsize=18, color='black', transform=ax.transAxes)
+            ax = self.fig.add_subplot(gs[1])
+            ax.scatter(cells['cx'], cells['cy'], c=cells['mCherry'])
+            ax.set_xlim(0, 80)
+            ax.set_ylim(10, -10)
+            ax = self.fig.add_subplot(gs[2])
+            ax.scatter(cells['cy'], cells['mCherry'], c=cells[column], s=160, cmap='rainbow')
+            ax.scatter(cells['cy'], cells['mCherry'], c=cells['ext_mCherry'])
+            ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='magenta', s=80, marker='D')
+            ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c='yellow', s=80, marker='D')
+            ax.set_xlim(-10, 10)
+            ax.set_ylim(0, 4)
+
+        for index, sample in enumerate(samples):
+            plot_sample(sample, self.gs[index])
 
         super().plot()
-
-    # def plot(self):
-    #
-    #     def plot_centroids(s_centroids, g_centroids, name):
-    #         fig = plt.figure(figsize=[5, 5])
-    #         ax = fig.add_subplot(1, 1, 1)
-    #         c_centroids = s_centroids.loc[s_centroids['Cluster'] != 0]
-    #         ax.scatter(c_centroids['cy'], c_centroids['mCherry'], c=c_centroids['Cluster'], s=160, cmap='rainbow')
-    #         ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c=s_centroids['ext_mCherry'])
-    #         ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='green', s=80, marker='D')
-    #         if self.outdir is None:
-    #             fig.show()
-    #         else:
-    #             fig.savefig(os.path.join(self.outdir, self.basename + '_' + name + '.png'))
-    #
-    #     def plot_samples(method):
-    #         samples = self.cells.sort_values('Gene')['Sample'].unique()
-    #         n_samples = len(samples)
-    #         fig = plt.figure(figsize=[3 * 3, 3 * n_samples])
-    #         gs = gridspec.GridSpec(n_samples, 1)
-    #         g_centroids = self.cells.groupby('Cluster_' + method)[self.C_FEATURES].mean()
-    #         for index, sample in enumerate(samples):
-    #             cells = self.cells.loc[self.cells['Sample'] == sample].sort_values(by=['mCherry'])
-    #             gene = cells['Gene'].unique()[0]
-    #             s_centroids = cells.groupby('Cluster_' + method)[self.C_FEATURES].mean()
-    #             sgs = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[index])
-    #             ax = fig.add_subplot(sgs[0])
-    #             ax.scatter(cells['cx'], cells['cy'], c=cells['Cluster_' + method], cmap='rainbow')
-    #             ax.set_xlim(0, 80)
-    #             ax.set_ylim(10, -10)
-    #             ax.text(0.025, 0.95, sample + ' ' + gene, horizontalalignment='left', verticalalignment='top',
-    #                     fontsize=18, color='black', transform=ax.transAxes)
-    #             ax = fig.add_subplot(sgs[1])
-    #             ax.scatter(cells['cx'], cells['cy'], c=cells['mCherry'])
-    #             ax.set_xlim(0, 80)
-    #             ax.set_ylim(10, -10)
-    #             ax = fig.add_subplot(sgs[2])
-    #             ax.scatter(cells['cy'], cells['mCherry'], c=cells['Cluster_' + method], s=160, cmap='rainbow')
-    #             ax.scatter(cells['cy'], cells['mCherry'], c=cells['ext_mCherry'])
-    #             ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='magenta', s=80, marker='D')
-    #             ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c='yellow', s=80, marker='D')
-    #             ax.set_xlim(-10, 10)
-    #             ax.set_ylim(0, 4)
-    #         if self.outdir is None:
-    #             fig.show()
-    #         else:
-    #             fig.savefig(os.path.join(self.outdir, self.basename + '_' + method + '_samples.png'))
-    #
-    #     def sorted_legend(handles, labels=None):
-    #         if labels is None:
-    #             handles, labels = handles
-    #         hl = sorted(zip(handles, labels), key=operator.itemgetter(1))
-    #         handles2, labels2 = zip(*hl)
-    #         labels3 = [l.replace(' 0', ' ') for l in labels2]
-    #         return handles2, labels3
-    #
-    #     def h_cluster_dendrogram(z, ax, c_colors):
-    #         dd = dendrogram(
-    #             z,
-    #             truncate_mode='lastp',  # show only the last p merged clusters
-    #             p=self.k,               # show only the last p merged clusters
-    #             leaf_rotation=90.,      # rotates the x axis labels
-    #             leaf_font_size=8,       # font size for the x axis labels
-    #             show_contracted=True,   # to get a distribution impression in truncated branches
-    #             ax=ax,
-    #             link_color_func=lambda c: 'black'
-    #         )
-    #         ax.set_xticklabels(['Cluster %d' % c for c in range(1, len(ax.get_xmajorticklabels()) + 1)])
-    #         x_lbls = ax.get_xmajorticklabels()
-    #         num = -1
-    #         for lbl in x_lbls:
-    #             num += 1
-    #             lbl.set_color(c_colors(num))
-    #         return dd
-    #
-    #     plot_centroids(self.centroids.loc[idx[:, method], :], centroids, method + '_centroids')
-    #     plot_centroids(
-    #         self.cells.groupby(['Sample', 'Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
-    #             .rename(columns={'Cluster_' + method: 'Cluster'}),
-    #         self.cells.groupby(['Cluster_' + method], as_index=False)[self.C_FEATURES].mean()
-    #             .rename(columns={'Cluster_' + method: 'Cluster'}),
-    #             method + '_sample_centroids')
-    #
-    #     # fig = plt.figure(figsize=[10, 10])
-    #     # ax = fig.add_subplot(2, 2, 1)
-    #     # ax_xi = fig.add_subplot(2, 2, 2)
-    #     # ax_xy = fig.add_subplot(2, 2, 4)
-    #
-    #     # cells.loc[cells.groupby('Cluster')['Cluster'].transform('count').sort_values(ascending=False).index]
-    #
-    #     # clusters = cells.groupby('Cluster')['cx'].count().sort_values(ascending=False).index.tolist()
-    #     # c_colors = plt.cm.get_cmap("gist_rainbow", len(clusters))
-    #     # h_cluster_dendrogram(z, ax, c_colors)
-    #     #
-    #     # for cluster in clusters:
-    #     #     if cluster == 0:
-    #     #         continue
-    #     #     c_cells = cells[cells['Cluster'] == cluster]
-    #     #     c_count = c_cells['Cluster'].count()
-    #     #     label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
-    #     #     ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
-    #     #     ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
-    #     #
-    #     # handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
-    #     # ax = fig.add_subplot(2, 2, 3)
-    #     # ax.set_axis_off()
-    #     # ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
-    #     #
-    #     # filename = id + '_' + method + '_' + str(self.k) + '.png'
-    #     # fig.savefig(os.path.join(outdir, filename))
-    #     # plt.close(fig)
-    #     #
-    #     # samples = cells['Sample'].unique().tolist()
-    #     # for sample in samples:
-    #     #     fig = plt.figure(figsize=[10, 10])
-    #     #     ax_xyi = fig.add_subplot(2, 2, 1)
-    #     #     ax_xi = fig.add_subplot(2, 2, 4)
-    #     #     ax_xy = fig.add_subplot(2, 2, 2)
-    #     #     s_cells = cells[cells['Sample'] == sample].sort_values('mCherry')
-    #     #     ax_xyi.scatter(s_cells['cx'], s_cells['cy'], c=s_cells['mCherry'])
-    #     #     for cluster in clusters:
-    #     #         c_cells = s_cells[s_cells['Cluster'] == cluster]
-    #     #         c_count = c_cells['Cluster'].count()
-    #     #         label = "Cluster " + '%02d' % cluster + " (" + str(c_count) + " cells)"
-    #     #         ax_xi.scatter(c_cells['cy'], c_cells['mCherry'], c=[c_colors(cluster - 1)], label=label)
-    #     #         ax_xy.scatter(c_cells['cx'], c_cells['cy'], c=[c_colors(cluster - 1)], label=label)
-    #     #     handles, labels = sorted_legend(ax_xy.get_legend_handles_labels())
-    #     #     ax = fig.add_subplot(2, 2, 3)
-    #     #     ax.set_axis_off()
-    #     #     ax.legend(handles, labels, frameon=False, fontsize=15, loc='center')
-    #     #     filename = id + '_' + method + '_' + str(self.k) + '_' + sample + '.png'
-    #     #     fig.savefig(os.path.join(outdir, filename))
-    #     #     plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -687,8 +637,8 @@ if __name__ == "__main__":
     data = DiscData(args.data)
     clustering = Clustering(args.data, disc_data=data, args=args)
 
-    fig9d28 = Figure9d28(clustering)
-    fig9d28.show()
+    # fig9d28 = Figure9d28(clustering)
+    # fig9d28.show()
 
-    fig7895 = Figure9d28(clustering)
-    fig7895.show()
+    fig7895 = Figure7895(clustering)
+    fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
