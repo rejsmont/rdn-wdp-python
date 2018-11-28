@@ -79,6 +79,7 @@ class Clustering:
 
     def from_metadata(self, metadata):
         print("Trying from metadata")
+
         def explore(func, path, basedir=None, **kwargs):
             if basedir is None:
                 paths = [path, os.path.basename(path)]
@@ -133,10 +134,10 @@ class Clustering:
         if (override or self.cells is None or self.cells.empty) and self.data is not None:
             if self.clean or self.clean is None:
                 print("Will classify only clean cells...")
-                self.cells = self.data.cells()[self.data.clean_mask() & self.data.furrow_mask()].dropna()
+                self.cells = self.data.cells()[self.data.clean_mask()].dropna().copy()
             else:
                 print("Will classify all cells...")
-                self.cells = self.data.cells()[self.data.furrow_mask()].dropna()
+                self.cells = self.data.cells().dropna().copy()
             if override:
                 self.computed = False
         if self.cells is not None and not self.cells.empty:
@@ -191,7 +192,8 @@ class Clustering:
             return sorted(selected)
 
         def cluster(samples=None, method=None, id=None):
-            cells = self.cells
+            filer = (self.cells['cy'] >= DiscData.FURROW_MIN) & (self.cells['cy'] <= DiscData.FURROW_MAX)
+            cells = self.cells.loc[filer]
             if method is None:
                 method = self.method
             if samples is None:
@@ -305,7 +307,9 @@ class Clustering:
             rf = RandomForestClassifier(n_estimators=1000, n_jobs=-1)
             rf.fit(self.cells.loc[global_clusters.index, self.FEATURES], global_clusters)
             print("Computing predictions...")
-            self.cells['Cluster_' + method] = rf.predict(self.cells[self.FEATURES])
+            self.cells['Cluster_' + method] = 0
+            filter = (self.cells['cy'] >= DiscData.FURROW_MIN) & (self.cells['cy'] <= DiscData.FURROW_MAX)
+            self.cells.loc[filter, ['Cluster_' + method]] = rf.predict(self.cells.loc[filter, self.FEATURES])
             print("Done.")
 
         def name_clusters():
@@ -314,7 +318,6 @@ class Clustering:
             # Cluster A - R8 cells
             cluster_a = named_clusters['ext_mCherry'].idxmax()
             named_clusters = named_clusters.drop(cluster_a)
-
             # Cluster B - MF high ato
             cluster_b = named_clusters['mCherry'].idxmax()
             named_clusters = named_clusters.drop(cluster_b)
@@ -329,12 +332,20 @@ class Clustering:
             named_clusters = named_clusters.drop(cluster_e)
             # Cluster F - MF background
             cluster_f = named_clusters['mCherry'].idxmin()
-            named_clusters = named_clusters.drop(cluster_f)
             index = pd.MultiIndex.from_tuples([cluster_a, cluster_b, cluster_c, cluster_d, cluster_e, cluster_f],
                                               names=['SampleSet', 'Method', 'Cluster'])
             names = pd.DataFrame(['R8', 'MF-high', 'post-MF', 'pre-MF', 'MF-ato', 'MF'],
                                  index=index, columns=['Name'])
             self.centroids = self.centroids.join(names.xs(('global', self.method)), on='Cluster')
+
+        def classify_remaining():
+            idx = pd.IndexSlice
+            post_mf = self.centroids.loc[idx['global', self.method, :]]\
+                .loc[self.centroids['Name'] == 'post-MF'].index.get_level_values(2)
+            self.cells.loc[self.cells['cy'] > DiscData.FURROW_MAX, ['Cluster_' + self.method]] = post_mf
+            pre_mf = self.centroids.loc[idx['global', self.method, :]] \
+                .loc[self.centroids['Name'] == 'pre-MF'].index.get_level_values(2)
+            self.cells.loc[self.cells['cy'] < DiscData.FURROW_MIN, ['Cluster_' + self.method]] = pre_mf
 
         find_centroids(self.method)
         self.centroids['Cluster'] = 0
@@ -343,6 +354,7 @@ class Clustering:
         self.clusters = self.clusters.join(self.centroids['Cluster'], on=['SampleSet', 'Method', 'LocalCluster'])
         random_forest(self.method, cutoff=self.cutoff)
         name_clusters()
+        classify_remaining()
 
     def base_filename(self):
         base_name = 'k' + str(self.k) + 'n' + str(self.n) + 'r' + str(self.r)
