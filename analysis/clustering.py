@@ -43,7 +43,7 @@ class Clustering:
     can_compute = False
     computed = False
     outdir = None
-    prefix = None
+    prefix = ''
 
     def __init__(self, data, disc_data=None, **kwargs):
         print("Input is", data)
@@ -145,12 +145,12 @@ class Clustering:
         return False
 
     def init_params(self, **kwargs):
-        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir', 'clean', 'train_clean']
+        allowed = ['method', 'metric', 'k', 'n', 'r', 'cutoff', 'outdir', 'clean', 'train_clean', 'prefix']
         args = kwargs.pop('args', argparse.Namespace())
         for key in allowed:
             for value in [kwargs.get(key, None), getattr(args, key, None)]:
                 if value is not None:
-                    if key != 'outdir' and self.computed and getattr(self, key) != value:
+                    if key != 'outdir' and key != 'prefix' and self.computed and getattr(self, key) != value:
                         self.computed = False
                     setattr(self, key, value)
                     break
@@ -428,6 +428,7 @@ if __name__ == "__main__":
     parser.set_defaults(reproducible=False)
     parser.set_defaults(clean=False)
     parser.set_defaults(train_clean=False)
+    parser.set_defaults(prefix='')
 
     args = parser.parse_args()
 
