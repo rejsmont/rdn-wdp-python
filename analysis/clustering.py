@@ -46,7 +46,8 @@ class Clustering:
     prefix = ''
 
     def __init__(self, data, disc_data=None, **kwargs):
-        print("Input is", data)
+        self.logger = logging.getLogger('rdn-wdp-clustering')
+        self.logger.info("Input is " + str(data))
         self.data = disc_data
         self.init_params(**kwargs)
         initialized = self.from_data(data) or self.from_csv(data) or self.from_yml(data)
@@ -55,7 +56,7 @@ class Clustering:
         self.init_params(**kwargs)
 
     def from_csv(self, datafile):
-        print("Trying from CSV", datafile)
+        self.logger.debug("Trying from CSV " + str(datafile))
         self._source = datafile
         try:
             return self.from_data(DiscData(datafile, try_metadata=False))
@@ -63,14 +64,14 @@ class Clustering:
             return False
 
     def from_yml(self, datafile):
-        print("Trying from YML", datafile)
+        self.logger.debug("Trying from YML " + str(datafile))
         self._source = datafile
         with open(datafile, 'r') as stream:
             metadata = yaml.safe_load(stream)
             return self.from_metadata(metadata)
 
     def from_data(self, data):
-        print("Trying from DiscData", data)
+        self.logger.debug("Trying from DiscData " + str(data))
         if isinstance(data, DiscData):
             self.data = data
             self.can_compute = self.init_cells()
@@ -78,7 +79,7 @@ class Clustering:
         return False
 
     def from_metadata(self, metadata):
-        print("Trying from metadata")
+        self.logger.debug("Trying from metadata " + str(metadata))
 
         def explore(func, path, basedir=None, **kwargs):
             if basedir is None:
@@ -89,7 +90,7 @@ class Clustering:
             result = None
             for path in paths:
                 try:
-                    print("Trying", path)
+                    self.logger.debug("Trying to read " + str(path))
                     result = func(path, **kwargs)
                 except:
                     continue
@@ -133,10 +134,10 @@ class Clustering:
     def init_cells(self, override=False):
         if (override or self.cells is None or self.cells.empty) and self.data is not None:
             if self.clean or self.clean is None:
-                print("Will classify only clean cells...")
+                self.logger.info('Will classify only clean cells')
                 self.cells = self.data.cells()[self.data.clean_mask()].dropna().copy()
             else:
-                print("Will classify all cells...")
+                self.logger.info('Will classify all cells')
                 self.cells = self.data.cells().dropna().copy()
             if override:
                 self.computed = False
@@ -211,15 +212,16 @@ class Clustering:
             return z
 
         def find_centroids(method):
+            self.logger.info('Clustering cells')
             for i in range(0, self.r):
                 samples = get_samples(self.n)
                 id = hashlib.md5(str(samples).encode()).hexdigest()
-                print(i, id, samples)
-                print("\tComputing ", method)
+                self.logger.debug('Iteration ' + str(i) + ': ' + str(id) + ' ' + str(samples))
+                self.logger.debug('Computing ' + str(method))
                 try:
                     z = cluster(samples, method, id)
                 except Exception as e:
-                    print("Computing " + method + " for dataset " + id + " failed: " + str(e))
+                    self.logger.warning('Computing ' + method + ' for dataset ' + id + ' failed', exc_info=e)
             self.centroids: pd.DataFrame = self.clusters.join(
                 self.cells[self.C_FEATURES], on='Cell').groupby(
                 ['SampleSet', 'Method', 'LocalCluster'])[self.C_FEATURES].mean()
@@ -238,6 +240,7 @@ class Clustering:
                 ).set_index(['SampleSet', 'Method', 'LocalCluster'])
                 return clusters.join(centroids, on='LocalCluster').reindex(columns=self.centroids.columns)
 
+            self.logger.info('Clustering clusters')
             iters = 0
             last = np.zeros(self.centroids.loc[(self.centroids.index.levels[0][0], method), self.C_FEATURES].values.shape)
             prev = last
@@ -284,7 +287,7 @@ class Clustering:
                 last = new / samples
                 score = np.sum(np.abs(prev - last))
                 prev = last
-            print("Done in", iters, "iterations!", "Score is", score)
+            self.logger.info('Done in ' + str(iters) + ' iterations. Score is ' + str(score))
             self.centroids = self.centroids.append(create_dataframe(last))
 
         def random_forest(method, cutoff=-1.0):
@@ -294,7 +297,7 @@ class Clustering:
                 except statistics.StatisticsError:
                     return 0
 
-            print("Training classifier...")
+            self.logger.info('Training classifier')
             idx = pd.IndexSlice
             if cutoff == -1.0:
                 clusters = self.clusters.loc[idx[:, method, :], :]
@@ -306,11 +309,11 @@ class Clustering:
             global_clusters.drop(global_clusters[global_clusters == 0].index, inplace=True)
             rf = RandomForestClassifier(n_estimators=1000, n_jobs=-1)
             rf.fit(self.cells.loc[global_clusters.index, self.FEATURES], global_clusters)
-            print("Computing predictions...")
+            self.logger.info('Computing predictions')
             self.cells['Cluster_' + method] = 0
             filter = (self.cells['cy'] >= DiscData.FURROW_MIN) & (self.cells['cy'] <= DiscData.FURROW_MAX)
             self.cells.loc[filter, ['Cluster_' + method]] = rf.predict(self.cells.loc[filter, self.FEATURES])
-            print("Done.")
+            self.logger.info('Predictions done')
 
         def name_clusters():
             idx = pd.IndexSlice
@@ -355,6 +358,7 @@ class Clustering:
         random_forest(self.method, cutoff=self.cutoff)
         name_clusters()
         classify_remaining()
+        self.logger.info('Cell classification done')
 
     def base_filename(self):
         base_name = 'k' + str(self.k) + 'n' + str(self.n) + 'r' + str(self.r)
@@ -378,6 +382,7 @@ class Clustering:
     def save(self, outdir=None):
         if outdir is None:
             outdir = '.' if self.outdir is None else self.outdir
+        self.logger.info('Saving results to ' + str(outdir))
 
         metadata = {
             'input': {
@@ -405,10 +410,15 @@ class Clustering:
             },
         }
         with open(os.path.join(outdir, self.meta_filename()), 'w') as metafile:
+            self.logger.debug('Saving metadata to ' + self.meta_filename())
             yaml.dump(metadata, metafile, default_flow_style=False)
+        self.logger.debug('Saving clusters to ' + self.clusters_filename())
         self.clusters.to_csv(os.path.join(outdir, self.clusters_filename()))
+        self.logger.debug('Saving centroids to ' + self.centroids_filename())
         self.centroids.to_csv(os.path.join(outdir, self.centroids_filename()))
+        self.logger.debug('Saving cells to ' + self.cells_filename())
         self.cells.to_csv(os.path.join(outdir, self.cells_filename()))
+        self.logger.info('Saving done')
 
 
 if __name__ == "__main__":
@@ -443,8 +453,6 @@ if __name__ == "__main__":
         np.random.seed(0)
     else:
         np.random.seed()
-
-    print(args)
 
     clustering = Clustering(args.data, args=args)
     clustering.compute()
