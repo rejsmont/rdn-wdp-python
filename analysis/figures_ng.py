@@ -29,6 +29,8 @@ MF_MAX = 10
 class Figure:
 
     def __init__(self, data):
+        self.logger = logging.getLogger('rdn-wdp-figures')
+        self.logger.debug('Initializing ' + self.name())
         self.data = data
         self.fig = None
         self.gs = None
@@ -37,16 +39,22 @@ class Figure:
     def show(self):
         if not self.plotted:
             self.plot()
+        self.logger.info('Showing ' + self.name())
         self.fig.show()
 
     def save(self, path):
         if not self.plotted:
             self.plot()
+        self.logger.info('Saving ' + self.name() + ' to ' + path)
         self.fig.savefig(path)
 
     def plot(self):
+        self.logger.info('Plotting ' + self.name())
         self.plotted = True
         pass
+
+    def name(self):
+        return self.__class__.__name__
 
 
 class Plot:
@@ -514,6 +522,15 @@ class Figure9d28(Figure):
 
 class Figure7895(Figure):
 
+    GX_MIN = 0
+    GX_MAX = 80
+    GY_MIN = -10
+    GY_MAX = 45
+    EXC_MIN = 0
+    EXC_MAX = 4
+    PLT_WIDTH = 5
+    PLT_HEIGHT = 5
+
     data: Clustering = None
     gene = None
     plots = {}
@@ -525,6 +542,12 @@ class Figure7895(Figure):
             genes = self.data.cells['Gene'].unique().tolist()
             for gene in sorted(genes):
                 self.plots[gene] = Figure7895(data, gene)
+
+    def name(self):
+        if self.gene is not None:
+            return super().name() + ' (' + self.gene + ')'
+        else:
+            return super().name()
 
     def close(self):
         plt.close(self.fig)
@@ -559,7 +582,7 @@ class Figure7895(Figure):
             else:
                 dirname = os.path.dirname(path)
                 for gene, plot in self.plots.items():
-                    extension, basename = os.path.splitext(os.path.basename(path))
+                    basename, extension = os.path.splitext(os.path.basename(path))
                     plot.save(os.path.join(dirname, basename + '_' + gene + extension))
                     if close:
                         plot.close()
@@ -571,7 +594,7 @@ class Figure7895(Figure):
         samples = self.data.cells.loc[filter, 'Sample'].unique()
         n_samples = len(samples)
         rows = math.ceil(n_samples / 2.0)
-        self.fig = plt.figure(figsize=(18, 3*rows))
+        self.fig = plt.figure(figsize=(self.PLT_WIDTH * 6, self.PLT_HEIGHT * rows))
         self.gs = gridspec.GridSpec(rows, 2)
 
         column = 'Cluster_' + self.data.method
@@ -586,21 +609,21 @@ class Figure7895(Figure):
             gs = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=ss)
             ax = self.fig.add_subplot(gs[0])
             ax.scatter(cells['cx'], cells['cy'], c=cells[column], cmap='rainbow')
-            ax.set_xlim(0, 80)
-            ax.set_ylim(DiscData.FURROW_MAX, DiscData.FURROW_MIN)
+            ax.set_xlim(self.GX_MIN, self.GX_MAX)
+            ax.set_ylim(self.GY_MAX, self.GY_MIN)
             ax.text(0.025, 0.95, sample + ' ' + gene, horizontalalignment='left', verticalalignment='top',
                     fontsize=18, color='black', transform=ax.transAxes)
             ax = self.fig.add_subplot(gs[1])
             ax.scatter(cells['cx'], cells['cy'], c=cells['mCherry'])
-            ax.set_xlim(0, 80)
-            ax.set_ylim(10, -10)
+            ax.set_xlim(self.GX_MIN, self.GX_MAX)
+            ax.set_ylim(self.GY_MAX, self.GY_MIN)
             ax = self.fig.add_subplot(gs[2])
             ax.scatter(cells['cy'], cells['mCherry'], c=cells[column], s=160, cmap='rainbow')
             ax.scatter(cells['cy'], cells['mCherry'], c=cells['ext_mCherry'])
             ax.scatter(g_centroids['cy'], g_centroids['mCherry'], c='magenta', s=80, marker='D')
             ax.scatter(s_centroids['cy'], s_centroids['mCherry'], c='yellow', s=80, marker='D')
-            ax.set_xlim(-10, 10)
-            ax.set_ylim(0, 4)
+            ax.set_xlim(self.GY_MIN, self.GY_MAX)
+            ax.set_ylim(self.EXC_MIN, self.EXC_MAX)
 
         for index, sample in enumerate(samples):
             plot_sample(sample, self.gs[index])
