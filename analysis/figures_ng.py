@@ -16,7 +16,7 @@ from scipy import stats
 from scipy.signal import savgol_filter
 from scipy.cluster.hierarchy import dendrogram as dng, linkage
 from data import DiscData
-from clustering import Clustering
+from clustering import Clustering, ClusteredData
 
 GX_MIN = 0
 GX_MAX = 80
@@ -109,7 +109,7 @@ class LogScaleGenePlot:
     def cmap(): return 'plasma'
 
     @staticmethod
-    def v_lim(): return [0.1, 30]
+    def v_lim(): return [0.1, 20]
 
     @staticmethod
     def v_scale(): return 'log'
@@ -160,7 +160,7 @@ class ProfilePlot(Plot):
         ax.legend(handles, labels, ncol=ncol, loc=loc, frameon=False, fontsize=18)
 
     def plot_profile(self, profile, style=None):
-        data = self.data[profile]
+        data = self.data[profile].dropna()
         x = data.index
         y = self.preprocessor(data.values)
         style = style if style is not None else {}
@@ -214,7 +214,7 @@ class DVProfilePlot(ProfilePlot):
 class SmoothProfilePlot(ProfilePlot):
     @staticmethod
     def preprocessor(x):
-        return savgol_filter(x, 9, 3, mode='nearest')
+        return savgol_filter(x, 5, 3, mode='nearest')
 
 
 class DiscThumb(Plot):
@@ -631,6 +631,122 @@ class Figure7895(Figure):
         super().plot()
 
 
+class Figure0ac7(Figure):
+
+    class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, LabeledPlot, SmoothProfilePlot):
+        pass
+
+    # class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, LabeledPlot):
+    #     pass
+
+    def __init__(self, data, columns=4):
+        super().__init__(data)
+        self.columns = columns
+        self.genes = self.data.genes_sorted()
+        self.rows = math.ceil(len(self.genes) / self.columns)
+
+    def plot(self):
+        e = 1 if (len(self.genes) % self.columns == 0) else 0
+        rows = self.rows + e
+        self.fig = plt.figure(figsize=(5 * self.columns, rows * 2.75))
+        self.gs = gridspec.GridSpec(rows, self.columns)
+
+        profiles = self.data.profiles()
+        genes = profiles.index.levels[0]
+        print(genes)
+        template = pd.DataFrame(index=pd.Index(range(MF_MIN, MF_MAX + 1)))
+        for c in range(1, 7):
+            template['Target mean ' + self.data.CLUSTER_NAMES[c]] = np.nan
+        n_genes = len(genes)
+
+        def symbol(i):
+            if n_genes <= 26:
+                return chr(ord('A') + i)
+            else:
+                m = math.floor(index / 26)
+                return chr(ord('A') + m) + chr(ord('A') + (i - (26 * m)))
+
+        index = 0
+        plot = None
+        for index, gene in enumerate(genes):
+            profile = profiles.loc[gene]
+            gene_profiles = template.copy()
+            for c in range(1, 7):
+                gene_profiles['Target mean ' + self.data.CLUSTER_NAMES[c]] = profile.loc[c]['mean']
+
+            ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index], width_ratios=[1, 20])
+            plot = self.GeneProfilePlot(self.fig, gene_profiles)
+
+            ax = self.fig.add_subplot(ogs[0])
+            ax.set_axis_off()
+            ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
+            letter = symbol(index)
+            text = letter
+            plot.plot(ogs[1], text=text, label='left',
+                      firstcol=True, firstrow=(index < self.columns),
+                      lastcol=False, lastrow=(index >= n_genes - self.columns), controw=True)
+
+        ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index + 1], width_ratios=[1, 20])
+        plot.legend(ogs[1])
+        super().plot()
+
+
+class Figure7e0b(Figure0ac7):
+
+    class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, LabeledPlot, SmoothProfilePlot):
+        pass
+
+    def __init__(self, data, columns=4):
+        super().__init__(data)
+        self.columns = columns
+        self.genes = self.data.genes_sorted()
+        self.rows = math.ceil(len(self.genes) / self.columns)
+
+    def plot(self):
+        e = 1 if (len(self.genes) % self.columns == 0) else 0
+        rows = self.rows + e
+        self.fig = plt.figure(figsize=(5 * self.columns, rows * 2.75))
+        self.gs = gridspec.GridSpec(rows, self.columns)
+
+        profiles = self.data.profiles()
+        genes = profiles.index.levels[0]
+        template = pd.DataFrame(index=pd.Index(range(MF_MIN, MF_MAX + 1)))
+        for c in range(1, 7):
+            template['Target mean ' + self.data.CLUSTER_NAMES[c]] = np.nan
+        n_genes = len(genes)
+
+        def symbol(i):
+            if n_genes <= 26:
+                return chr(ord('A') + i)
+            else:
+                m = math.floor(index / 26)
+                return chr(ord('A') + m) + chr(ord('A') + (i - (26 * m)))
+
+        index = 0
+        plot = None
+        for index, gene in enumerate(genes):
+            profile = profiles.loc[gene]
+            gene_profiles = template.copy()
+            for c in range(1, 7):
+                gene_profiles['Target mean ' + self.data.CLUSTER_NAMES[c]] = profile.loc[c]['mean']
+
+            ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index], width_ratios=[1, 20])
+            plot = self.GeneProfilePlot(self.fig, gene_profiles)
+
+            ax = self.fig.add_subplot(ogs[0])
+            ax.set_axis_off()
+            ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
+            letter = symbol(index)
+            text = letter
+            plot.plot(ogs[1], text=text, label='left',
+                      firstcol=True, firstrow=(index < self.columns),
+                      lastcol=False, lastrow=(index >= n_genes - self.columns), controw=True)
+
+        ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index + 1], width_ratios=[1, 20])
+        plot.legend(ogs[1])
+        super().plot()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot all data.')
     parser.add_argument('--data', required=True)
@@ -659,9 +775,14 @@ if __name__ == "__main__":
 
     data = DiscData(args.data)
     clustering = Clustering(args.data, disc_data=data, args=args)
+    clustered = ClusteredData(clustering.cells)
+    clustered.profiles()
 
     # fig9d28 = Figure9d28(clustering)
     # fig9d28.show()
 
-    fig7895 = Figure7895(clustering)
-    fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
+    # fig7895 = Figure7895(clustering)
+    # fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
+
+    fig0ac7 = Figure0ac7(clustered)
+    fig0ac7.show()

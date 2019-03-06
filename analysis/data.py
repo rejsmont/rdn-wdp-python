@@ -16,7 +16,7 @@ class DiscData:
     _cells: pd.DataFrame = None
 
     def __init__(self, data, try_metadata=True):
-        if not self.from_csv(data) and not (try_metadata and self.from_yml(data)):
+        if not self.from_data_frame(data) and not self.from_csv(data) and not (try_metadata and self.from_yml(data)):
             raise RuntimeError("No data was found in specified file!")
         self._cells_clean = None
         self._cells_background = None
@@ -31,6 +31,13 @@ class DiscData:
         self._clean_mask = None
         self._background_mask = None
         self._furrow_mask = None
+
+    def from_data_frame(self, data):
+        if data is not None and (isinstance(data, pd.DataFrame) and not data.empty):
+            self._cells = data
+            return True
+        else:
+            return False
 
     def from_csv(self, datafile):
         try:
