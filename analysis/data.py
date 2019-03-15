@@ -115,7 +115,6 @@ class DiscData:
             self._background_mask = (self._cells['cy'] >= -10) & (self._cells['cy'] <= -5)
         return self._background_mask
 
-
     # Shortcuts to get cells (filtered) #
 
     def source(self):
@@ -126,7 +125,7 @@ class DiscData:
 
     def cells_clean(self):
         if self._cells_clean is None:
-            self._cells_clean = self._cells[self._cells['Gene'].isin(self.genes_clean())]
+            self._cells_clean = self._cells[self.clean_mask()]
         return self._cells_clean
 
     def cells_background(self):
@@ -151,7 +150,7 @@ class DiscData:
     def genes(self):
         if not self._genes:
             self._genes = self._cells['Gene'].unique().tolist()
-        return self.genes_sorted
+        return self._genes
 
     def genes_sorted(self):
         if self._genes_sorted is None:

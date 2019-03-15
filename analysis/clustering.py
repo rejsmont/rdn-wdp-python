@@ -506,6 +506,7 @@ class bidict(dict):
 class ClusteredData(DiscData, QCData):
 
     CLUSTER_NAMES = bidict({1: 'R8', 2: 'MF-high', 3: 'MF', 4: 'post-MF', 5: 'pre-MF', 6: 'MF-ato'})
+    AGGREGATE_NAMES = bidict({10: 'no-ato', 11: 'med-ato', 12: 'high-ato'})
     _good_mask = None
     _acceptable_mask = None
 
@@ -532,6 +533,24 @@ class ClusteredData(DiscData, QCData):
         self._cells.loc[pre, 'Cluster_ward'] = self.CLUSTER_NAMES.inverse['pre-MF'][0]
         self._cells.loc[~pre_mf & c_pre_mf, 'Cluster_ward'] = self.CLUSTER_NAMES.inverse['MF'][0]
         self._cells.loc[post & c_mf, 'Cluster_ward'] = self.CLUSTER_NAMES.inverse['post-MF'][0]
+
+        def aggregate(cluster):
+            if cluster == self.CLUSTER_NAMES.inverse['pre-MF'][0]:
+                return 10
+            elif cluster == self.CLUSTER_NAMES.inverse['MF'][0]:
+                return 10
+            elif cluster == self.CLUSTER_NAMES.inverse['post-MF'][0]:
+                return 10
+            elif cluster == self.CLUSTER_NAMES.inverse['MF-ato'][0]:
+                return 11
+            elif cluster == self.CLUSTER_NAMES.inverse['MF-high'][0]:
+                return 12
+            elif cluster == self.CLUSTER_NAMES.inverse['R8'][0]:
+                return 12
+            else:
+                return 0
+
+        self._cells['Cluster_agg'] = self._cells['Cluster_ward'].apply(aggregate)
 
     def good_mask(self):
         if self._good_mask is None:
@@ -561,14 +580,24 @@ class ClusteredData(DiscData, QCData):
 
         cy = cells['cy'].round().astype('int')
         cluster = cells['Cluster_ward'].astype('int')
+        aggregate = cells['Cluster_agg'].astype('int')
 
         profile = cells_clean.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99])
+        profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
+        profile = cells_clean.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99])
         profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
 
         profile = cells.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99])
         profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
+        profile = cells.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99])
+        profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
 
         profile = cells.groupby(['Gene', cluster, cy])['Venus'].agg([np.mean, self.q99])
         profiles.append(profile)
+        profile = cells.groupby(['Gene', aggregate, cy])['Venus'].agg([np.mean, self.q99])
+        profiles.append(profile)
 
         self._profiles = pd.concat(profiles)
+
+
+

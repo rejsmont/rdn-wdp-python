@@ -17,6 +17,7 @@ from scipy.signal import savgol_filter
 from scipy.cluster.hierarchy import dendrogram as dng, linkage
 from data import DiscData
 from clustering import Clustering, ClusteredData
+from chip import ChIP
 
 GX_MIN = 0
 GX_MAX = 80
@@ -645,6 +646,9 @@ class Figure0ac7(Figure):
         self.genes = self.data.genes_sorted()
         self.rows = math.ceil(len(self.genes) / self.columns)
 
+    def plist(self):
+        return self.data.CLUSTER_NAMES
+
     def plot(self):
         e = 1 if (len(self.genes) % self.columns == 0) else 0
         rows = self.rows + e
@@ -652,11 +656,11 @@ class Figure0ac7(Figure):
         self.gs = gridspec.GridSpec(rows, self.columns)
 
         profiles = self.data.profiles()
+        plist = self.plist()
         genes = profiles.index.levels[0]
-        print(genes)
         template = pd.DataFrame(index=pd.Index(range(MF_MIN, MF_MAX + 1)))
-        for c in range(1, 7):
-            template['Target mean ' + self.data.CLUSTER_NAMES[c]] = np.nan
+        for c in plist.keys():
+            template['Target mean ' + plist[c]] = np.nan
         n_genes = len(genes)
 
         def symbol(i):
@@ -671,8 +675,8 @@ class Figure0ac7(Figure):
         for index, gene in enumerate(genes):
             profile = profiles.loc[gene]
             gene_profiles = template.copy()
-            for c in range(1, 7):
-                gene_profiles['Target mean ' + self.data.CLUSTER_NAMES[c]] = profile.loc[c]['mean']
+            for c in plist.keys():
+                gene_profiles['Target mean ' + plist[c]] = profile.loc[c]['mean']
 
             ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index], width_ratios=[1, 20])
             plot = self.GeneProfilePlot(self.fig, gene_profiles)
@@ -702,54 +706,89 @@ class Figure7e0b(Figure0ac7):
         self.genes = self.data.genes_sorted()
         self.rows = math.ceil(len(self.genes) / self.columns)
 
-    def plot(self):
-        e = 1 if (len(self.genes) % self.columns == 0) else 0
-        rows = self.rows + e
-        self.fig = plt.figure(figsize=(5 * self.columns, rows * 2.75))
-        self.gs = gridspec.GridSpec(rows, self.columns)
+    def plist(self):
+        return self.data.AGGREGATE_NAMES
 
+
+class Figurea2a8(Figure):
+
+    def __init__(self, cells, chip):
+        super().__init__(cells)
+        self.chip = chip
+        self.ratios = None
+
+    def compute(self):
         profiles = self.data.profiles()
-        genes = profiles.index.levels[0]
-        template = pd.DataFrame(index=pd.Index(range(MF_MIN, MF_MAX + 1)))
-        for c in range(1, 7):
-            template['Target mean ' + self.data.CLUSTER_NAMES[c]] = np.nan
-        n_genes = len(genes)
+        cells = self.data.cells()[self.data.furrow_mask()]
 
-        def symbol(i):
-            if n_genes <= 26:
-                return chr(ord('A') + i)
-            else:
-                m = math.floor(index / 26)
-                return chr(ord('A') + m) + chr(ord('A') + (i - (26 * m)))
+        high_ato = self.data.AGGREGATE_NAMES.inverse['high-ato'][0]
+        no_ato = self.data.AGGREGATE_NAMES.inverse['no-ato'][0]
 
-        index = 0
-        plot = None
-        for index, gene in enumerate(genes):
-            profile = profiles.loc[gene]
-            gene_profiles = template.copy()
-            for c in range(1, 7):
-                gene_profiles['Target mean ' + self.data.CLUSTER_NAMES[c]] = profile.loc[c]['mean']
+        ratios = (profiles.xs(high_ato, level=1).loc[:, 'mean'] /
+                  profiles.xs(no_ato, level=1).loc[:, 'mean']).groupby('Gene')
+        cell_ratio = (cells.loc[cells['Cluster_agg'] == high_ato, ['Venus', 'Gene']].groupby('Gene').mean()) / \
+                     (cells.loc[cells['Cluster_agg'] == no_ato, ['Venus', 'Gene']].groupby('Gene').mean())
+        cell_ratio = cell_ratio['Venus'].rename('Expression ratio (mean)')
+        peaks = chip.peaks().groupby('Gene').agg(['sum', 'count'])
+        max_ratio = ratios.max().rename('Exprofile ratio (max)')
+        ato_p_area = peaks.loc[:, ('p_area', 'sum')].rename('Peak area')
+        ato_p_num = peaks.loc[:, ('p_area', 'count')].rename('Peak count')
 
-            ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index], width_ratios=[1, 20])
-            plot = self.GeneProfilePlot(self.fig, gene_profiles)
+        self.ratios = pd.DataFrame([cell_ratio, max_ratio, ato_p_area, ato_p_num]).transpose()
 
-            ax = self.fig.add_subplot(ogs[0])
-            ax.set_axis_off()
-            ax.text(0.5, 0.5, gene, horizontalalignment='center', verticalalignment='center', fontsize=24, rotation=90)
-            letter = symbol(index)
-            text = letter
-            plot.plot(ogs[1], text=text, label='left',
-                      firstcol=True, firstrow=(index < self.columns),
-                      lastcol=False, lastrow=(index >= n_genes - self.columns), controw=True)
+    def plot(self):
+        if self.ratios is None:
+            self.compute()
 
-        ogs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=self.gs[index + 1], width_ratios=[1, 20])
-        plot.legend(ogs[1])
-        super().plot()
+        self.fig = plt.figure(figsize=(10, 10))
+        self.gs = gridspec.GridSpec(2, 2)
+
+        # (Ato ChIP peak area) vs (Target expression fold change)
+        ax = self.fig.add_subplot(self.gs[0])
+        ratios = self.ratios.dropna().sort_values('Peak area')
+        x = ratios['Peak area']
+        y = ratios['Expression ratio (mean)']
+        ax.scatter(x, y)
+        gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        ry = gradient * x + intercept
+        ax.plot(x, ry)
+        ax.text(0.075, 0.9, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
+                fontsize=12, transform=ax.transAxes)
+        ax.set_xlabel('Ato ChIP peak area')
+        ax.set_ylabel('Target expression fold change')
+
+        # (Ato ChIP peak area)
+        ax = self.fig.add_subplot(self.gs[1])
+        ratios = self.ratios.dropna().sort_index()
+        y = ratios['Peak area']
+        x = np.arange(y.count())
+        labels_chip = list(y.index.values)
+        ax.bar(x, y)
+        ax.set_xlabel('Target gene')
+        ax.set_ylabel('Ato ChIP peak area')
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels_chip, rotation=45, ha='right')
+
+        # (Target expression fold change)
+        ax = self.fig.add_subplot(self.gs[2:])
+        ratios = self.ratios.sort_index()
+        y = ratios['Expression ratio (mean)'].dropna()
+        x = np.arange(y.count())
+        labels = list(y.index.values)
+        ax.axhline(y=1)
+        ax.bar(x, y)
+        ax.set_xlabel('Target gene')
+        ax.set_ylabel('Target expression fold change')
+        ax.set_xticks([labels.index(i) for i in labels_chip])
+        ax.set_xticklabels(labels_chip, {'weight': 'bold'}, rotation=45, ha='right')
+        ax.set_xticks([labels.index(l) for l in labels if l not in labels_chip], minor=True)
+        ax.set_xticklabels([l for l in labels if l not in labels_chip], rotation=45, ha='right', minor=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot all data.')
     parser.add_argument('--data', required=True)
+    parser.add_argument('--chip', required=False)
     parser.add_argument('--log')
     parser.add_argument('--outdir')
     parser.add_argument('-k', '--clusters', dest='k', type=int, default=6)
@@ -776,7 +815,10 @@ if __name__ == "__main__":
     data = DiscData(args.data)
     clustering = Clustering(args.data, disc_data=data, args=args)
     clustered = ClusteredData(clustering.cells)
-    clustered.profiles()
+    if args.chip:
+        chip = ChIP(args.chip, data.genes())
+    else:
+        chip = None
 
     # fig9d28 = Figure9d28(clustering)
     # fig9d28.show()
@@ -784,5 +826,13 @@ if __name__ == "__main__":
     # fig7895 = Figure7895(clustering)
     # fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
 
-    fig0ac7 = Figure0ac7(clustered)
-    fig0ac7.show()
+    # fig0ac7 = Figure0ac7(clustered)
+    # fig0ac7.show()
+
+    # fig7e0b = Figure7e0b(clustered)
+    # fig7e0b.show()
+
+    figa2a8 = Figurea2a8(clustered, chip)
+    figa2a8.show()
+
+
