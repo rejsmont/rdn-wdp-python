@@ -719,7 +719,7 @@ class Figurea2a8(Figure):
 
     def compute(self):
         profiles = self.data.profiles()
-        cells = self.data.cells()[self.data.furrow_mask()]
+        cells = self.data.cells()[self.data.furrow_mask() & ~self.data.bad_gene_mask()]
 
         high_ato = self.data.AGGREGATE_NAMES.inverse['high-ato'][0]
         no_ato = self.data.AGGREGATE_NAMES.inverse['no-ato'][0]
@@ -746,14 +746,27 @@ class Figurea2a8(Figure):
         # (Ato ChIP peak area) vs (Target expression fold change)
         ax = self.fig.add_subplot(self.gs[0])
         ratios = self.ratios.dropna().sort_values('Peak area')
-        x = ratios['Peak area']
-        y = ratios['Expression ratio (mean)']
+        ratiosA = self.ratios.loc[self.ratios.index != 'nvy'].dropna().sort_values('Peak area')
+        ratiosN = self.ratios.loc[['nvy']].dropna().sort_values('Peak area')
+        x = ratiosA['Peak area']
+        y = ratiosA['Expression ratio (mean)']
         ax.scatter(x, y)
         gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         ry = gradient * x + intercept
         ax.plot(x, ry)
         ax.text(0.075, 0.9, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
                 fontsize=12, transform=ax.transAxes)
+        x = ratiosN['Peak area']
+        y = ratiosN['Expression ratio (mean)']
+        ax.scatter(x, y)
+        x = ratios['Peak area']
+        y = ratios['Expression ratio (mean)']
+        gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        ry = gradient * x + intercept
+        ax.plot(x, ry)
+        ax.text(0.075, 0.85, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
+                fontsize=12, transform=ax.transAxes, color='r')
+
         ax.set_xlabel('Ato ChIP peak area')
         ax.set_ylabel('Target expression fold change')
 
@@ -763,7 +776,8 @@ class Figurea2a8(Figure):
         y = ratios['Peak area']
         x = np.arange(y.count())
         labels_chip = list(y.index.values)
-        ax.bar(x, y)
+        barlist = ax.bar(x, y)
+        barlist[6].set_color('C1')
         ax.set_xlabel('Target gene')
         ax.set_ylabel('Ato ChIP peak area')
         ax.set_xticks(x)
@@ -775,8 +789,9 @@ class Figurea2a8(Figure):
         y = ratios['Expression ratio (mean)'].dropna()
         x = np.arange(y.count())
         labels = list(y.index.values)
-        ax.axhline(y=1)
-        ax.bar(x, y)
+        ax.axhline(y=1, color='C3')
+        barlist = ax.bar(x, y)
+        barlist[22].set_color('C1')
         ax.set_xlabel('Target gene')
         ax.set_ylabel('Target expression fold change')
         ax.set_xticks([labels.index(i) for i in labels_chip])

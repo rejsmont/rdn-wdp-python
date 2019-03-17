@@ -11,6 +11,7 @@ class DiscData:
 
     FURROW_MIN = -8.0
     FURROW_MAX = 8.0
+    BAD_GENES = ['beat-IIIc', 'CG17378', 'CG31176', 'lola-P', 'nmo', 'CG30343', 'siz', 'sNPF', 'spdo', 'Vn']
 
     _source = None
     _cells: pd.DataFrame = None
@@ -31,6 +32,7 @@ class DiscData:
         self._clean_mask = None
         self._background_mask = None
         self._furrow_mask = None
+        self._bad_gene_mask = None
 
     def from_data_frame(self, data):
         if data is not None and (isinstance(data, pd.DataFrame) and not data.empty):
@@ -99,6 +101,11 @@ class DiscData:
         self._cells = self._cells.drop(bad_cells)
 
     # Binary masks for identifying cell types #
+
+    def bad_gene_mask(self):
+        if self._bad_gene_mask is None:
+            self._bad_gene_mask = self._cells['Gene'].isin(self.BAD_GENES)
+        return self._bad_gene_mask
 
     def clean_mask(self):
         if self._clean_mask is None:

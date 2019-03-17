@@ -575,8 +575,8 @@ class ClusteredData(DiscData, QCData):
 
     def _c_profiles(self):
         profiles = []
-        cells = self.cells()[self.acceptable_mask()]
-        cells_clean = self.cells()[self.clean_mask() & self.acceptable_mask()]
+        cells = self.cells()[self.acceptable_mask() & ~self.bad_gene_mask()]
+        cells_clean = self.cells()[self.clean_mask() & self.acceptable_mask() & ~self.bad_gene_mask()]
 
         cy = cells['cy'].round().astype('int')
         cluster = cells['Cluster_ward'].astype('int')
