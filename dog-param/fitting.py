@@ -20,8 +20,8 @@ xxx = arange(min(x_pos),max(x_pos),x_pos[1]-x_pos[0])
 ccc = gauss_fit(v,xxx) # this will only work if the units are pixel and not wavelength
 fig = figure(figsize=(9, 9)) #make a plot
 ax1 = fig.add_subplot(111)
-ax1.plot(x_pos,y_power,'gs') #spectrum
-ax1.plot(xxx,ccc,'b-') #fitted spectrum
+ax1.plot_img(x_pos, y_power, 'gs') #spectrum
+ax1.plot_img(xxx, ccc, 'b-') #fitted spectrum
 ax1.axvline(x=xxx[where(ccc == max(ccc))[0]][0], color='r') #max position in data
 setp(gca(), ylabel="power", xlabel="pixel position")
 #pylab.savefig("plotfitting.png")

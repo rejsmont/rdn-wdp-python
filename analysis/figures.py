@@ -200,7 +200,7 @@ def x_profile(data, channel):
 def plot_profile(ax, data, label, linestyle=None, color=None):
     x = data.index
     y = savgol_filter(data.values, 9, 3, mode='nearest')
-    ax.plot(x, y, label=label, linestyle=linestyle, color=color)
+    ax.plot_img(x, y, label=label, linestyle=linestyle, color=color)
 
 
 def format_axis(ax, ticks, axis='y'):
@@ -224,7 +224,7 @@ def plot_profiles(ax, profiles, styles, ticks, axis='y'):
 def plot_profile_2(ax, data, preprocessor=None, style=None):
     x = data.index
     y = preprocessor(data.values) if preprocessor else data.values
-    ax.plot(x, y, label=data, **style)
+    ax.plot_img(x, y, label=data, **style)
 
 
 def plot_profiles_2(ax, profiles, ticks, styles=None, preprocessors=None, axis='y'):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 import numpy as np
 import pandas as pd
 import os
@@ -12,6 +13,23 @@ class DiscData:
     FURROW_MIN = -8.0
     FURROW_MAX = 8.0
     BAD_GENES = ['beat-IIIc', 'CG17378', 'CG31176', 'lola-P', 'nmo', 'CG30343', 'siz', 'sNPF', 'spdo', 'Vn']
+    BAD_SAMPLES = ['J0RYWJ', '3SKX4V', '7AMINR', '4EAAEF', 'VH2DCR', 'WJ8F8M', 'ZNVOPe', 'APKoAe', 'zfroDh',
+                   'lgxpL6', 'pcTNzE', '80IkVQ', 'UQZJ3K']
+    BAD_SEGMENTATION = ['4JBUL9', 'iR8dRr', 'DP026C', 'M16RU7', 'SUM9J1', 'U6I1AU',
+                        '3ACQ9G', 'N44DGI', 'DJCSO8', 'I50aWV', 'K7Z736', '2WGFS6',
+                        'U83TV8', '8O390U', 'HHTZYR', '00XPV8', 'R4DM2J', '0JHFR9',
+                        'TFDL12', 'AVU1IU', 'HK94X1', 'hZqrt6', 'JZ3JMW', 'TGF7PS',
+                        'NVFOVJ', 'UQZJ3K', 'jO60x8', 'B6VI9Z', 'YIRWN0', 'VWY8F7',
+                        'YV5WS7', 'FWKECB', '8XMOYH', 'pcTNzE', 'MPPQAH', '0BLH7D',
+                        'vTdokD', '9UZZ89', 'CIC2MN', 'FMJIUN', 'SPIEnu', 'XMPFVP',
+                        'S3V42Z', 'OUZDKY', 'UXWCJN', '1M9HV1', 'INY5MS', 'P8wx2r',
+                        'S71NTY', 'YVWYEX', '988JF7', 'PFQ5ZI', '2XZPQJ', 'QQ2M12',
+                        '4B7A64', 'W7GCED', 'WJ8F8M', '2YESFH', '4EAAEF', 'EXM95X',
+                        '9QOALF', '2PTAYA', 'H8MQMN', 'UVXACM', 'CNYWCK', 'BB2ZVQ',
+                        'Q1UDZJ', 'S6WN8L', '4bZ8wf']
+
+    SYNONYMS = {'CG1625': 'dila', 'CG6860': 'Lrch', 'CG8965': 'rau', 'HLHmdelta': 'E(spl)mdelta-HLH',
+                'king-tubby': 'ktub', 'n-syb': 'nSyb'}
 
     _source = None
     _cells: pd.DataFrame = None
@@ -94,11 +112,12 @@ class DiscData:
         self._cells = self._cells.drop(artifact)
 
         # Mark and remove bad CG9801 samples
-        bad_samples = ['J0RYWJ', '3SKX4V', '7AMINR', '4EAAEF', 'VH2DCR', 'WJ8F8M', 'ZNVOPe', 'APKoAe', 'zfroDh',
-                              'lgxpL6', 'pcTNzE', '80IkVQ', 'UQZJ3K']
-        self._cells.loc[self._cells['Sample'].isin(bad_samples), 'Gene'] = 'CG9801-B'
+        self._cells.loc[self._cells['Sample'].isin(self.BAD_SAMPLES), 'Gene'] = 'CG9801-B'
         bad_cells = self._cells[self._cells['Gene'] == 'CG9801-B'].index
         self._cells = self._cells.drop(bad_cells)
+
+        for gene, syn in self.SYNONYMS.items():
+            self._cells.loc[self._cells['Gene'] == gene, 'Gene'] = syn
 
     # Binary masks for identifying cell types #
 
@@ -237,3 +256,23 @@ class DiscData:
         self._profiles = pd.concat(profiles)
         self._dv_profiles = pd.concat(dv_profiles)
         self._matrices = pd.concat(matrices)
+
+
+class OriginalData:
+
+    def __init__(self, data):
+        self.cells = pd.DataFrame()
+        if not self.from_csv(data):
+            raise RuntimeError("No data was found in specified location!")
+
+    def from_csv(self, datafile):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter(action='ignore', category=FutureWarning)
+                cells = pd.read_csv(datafile, index_col=0)
+            if cells.empty:
+                raise RuntimeError("No data was found in specified file!")
+            self.cells = cells
+            return True
+        except RuntimeError:
+            return False

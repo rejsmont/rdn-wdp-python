@@ -37,7 +37,7 @@ class SampleProcessor:
         self.basename = os.path.splitext(self.sample)[0]
         split = self.basename.split("_")
         self.hash = split[len(split)-1]
-        self.logger = logging.getLogger(self.hash)
+        self.logger = logging.getLogger(str(self.hash))
         self.nuclei = pd.DataFrame()
         self.images = collections.OrderedDict()
         if options:

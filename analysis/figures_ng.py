@@ -165,7 +165,7 @@ class ProfilePlot(Plot):
         x = data.index
         y = self.preprocessor(data.values)
         style = style if style is not None else {}
-        self.ax.plot(x, y, label=profile, **style)
+        self.ax.plot_img(x, y, label=profile, **style)
 
     def plot_profiles(self):
         styles = self.styles()
@@ -556,7 +556,7 @@ class Figure7895(Figure):
     def plot(self):
         if self.gene is None:
             for plot in self.plots.values():
-                plot.plot()
+                plot.plot_img()
         else:
             return self.plot_gene()
 
@@ -753,7 +753,7 @@ class Figurea2a8(Figure):
         ax.scatter(x, y)
         gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         ry = gradient * x + intercept
-        ax.plot(x, ry)
+        ax.plot_img(x, ry)
         ax.text(0.075, 0.9, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
                 fontsize=12, transform=ax.transAxes)
         x = ratiosN['Peak area']
@@ -763,7 +763,7 @@ class Figurea2a8(Figure):
         y = ratios['Expression ratio (mean)']
         gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         ry = gradient * x + intercept
-        ax.plot(x, ry)
+        ax.plot_img(x, ry)
         ax.text(0.075, 0.85, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
                 fontsize=12, transform=ax.transAxes, color='r')
 
@@ -791,13 +791,14 @@ class Figurea2a8(Figure):
         labels = list(y.index.values)
         ax.axhline(y=1, color='C3')
         barlist = ax.bar(x, y)
-        barlist[22].set_color('C1')
+        barlist[21].set_color('C1')
         ax.set_xlabel('Target gene')
         ax.set_ylabel('Target expression fold change')
         ax.set_xticks([labels.index(i) for i in labels_chip])
         ax.set_xticklabels(labels_chip, {'weight': 'bold'}, rotation=45, ha='right')
         ax.set_xticks([labels.index(l) for l in labels if l not in labels_chip], minor=True)
         ax.set_xticklabels([l for l in labels if l not in labels_chip], rotation=45, ha='right', minor=True)
+        print(labels)
 
 
 if __name__ == "__main__":
@@ -838,16 +839,15 @@ if __name__ == "__main__":
     # fig9d28 = Figure9d28(clustering)
     # fig9d28.show()
 
-    # fig7895 = Figure7895(clustering)
-    # fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
+    #fig7895 = Figure7895(clustering)
+    #fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
 
-    # fig0ac7 = Figure0ac7(clustered)
-    # fig0ac7.show()
+    fig0ac7 = Figure0ac7(clustered)
+    fig0ac7.show()
 
-    # fig7e0b = Figure7e0b(clustered)
-    # fig7e0b.show()
+    fig7e0b = Figure7e0b(clustered)
+    fig7e0b.show()
 
     figa2a8 = Figurea2a8(clustered, chip)
     figa2a8.show()
-
 

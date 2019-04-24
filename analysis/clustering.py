@@ -509,6 +509,8 @@ class ClusteredData(DiscData, QCData):
     AGGREGATE_NAMES = bidict({10: 'no-ato', 11: 'med-ato', 12: 'high-ato'})
     _good_mask = None
     _acceptable_mask = None
+    _good_cells = None
+    _expression = None
 
     def __init__(self, data):
         super().__init__(data)
@@ -599,5 +601,22 @@ class ClusteredData(DiscData, QCData):
 
         self._profiles = pd.concat(profiles)
 
+    def genes(self):
+        if self._genes is None:
+            self._genes = self.good_cells()['Gene'].unique().tolist()
+        return self._genes
 
+    def good_cells(self):
+        if self._good_cells is None:
+            self._good_cells = self._cells.loc[self.acceptable_mask() & ~self.bad_gene_mask()]
+        return self._good_cells
+
+    def expression(self):
+        if self._expression is None:
+            cells = self.good_cells()
+            cy = cells['cy'].round().astype('int')
+            cluster = cells['Cluster_ward'].astype('int')
+            self._expression = cells.groupby([cluster, cy, 'Gene'])['Venus'].mean().unstack(level=2).dropna()
+
+        return self._expression
 
