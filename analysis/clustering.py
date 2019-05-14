@@ -511,9 +511,11 @@ class ClusteredData(DiscData, QCData):
     _acceptable_mask = None
     _good_cells = None
     _expression = None
+    _r_profiles = None
 
     def __init__(self, data):
-        super().__init__(data)
+        super().__init__(data.cells)
+        self.clustering = data
         self.cleanup_clusters()
 
     def cleanup_clusters(self):
@@ -569,6 +571,11 @@ class ClusteredData(DiscData, QCData):
             self._c_profiles()
         return self._profiles
 
+    def r_profiles(self):
+        if self._r_profiles is None:
+            self._c_r_profiles()
+        return self._r_profiles
+
     def dv_profiles(self):
         return None
 
@@ -584,22 +591,50 @@ class ClusteredData(DiscData, QCData):
         cluster = cells['Cluster_ward'].astype('int')
         aggregate = cells['Cluster_agg'].astype('int')
 
-        profile = cells_clean.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99])
+        profile = cells_clean.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99, np.std])
         profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
-        profile = cells_clean.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99])
+        profile = cells_clean.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99, np.std])
         profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
 
-        profile = cells.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99])
+        profile = cells.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99, np.std])
         profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
-        profile = cells.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99])
+        profile = cells.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99, np.std])
         profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
 
-        profile = cells.groupby(['Gene', cluster, cy])['Venus'].agg([np.mean, self.q99])
+        profile = cells.groupby(['Gene', cluster, cy])['Venus'].agg([np.mean, self.q99, np.std])
         profiles.append(profile)
-        profile = cells.groupby(['Gene', aggregate, cy])['Venus'].agg([np.mean, self.q99])
+        profile = cells.groupby(['Gene', aggregate, cy])['Venus'].agg([np.mean, self.q99, np.std])
         profiles.append(profile)
 
         self._profiles = pd.concat(profiles)
+
+    def _c_r_profiles(self):
+        profiles = []
+        cells = self.cells()[self.acceptable_mask() & ~self.bad_gene_mask()].copy()
+        cells_clean = self.cells()[self.clean_mask() & self.acceptable_mask() & ~self.bad_gene_mask()].copy()
+
+        cells['RelVenus'] = cells['Venus'] / cells['mCherry']
+
+        cy = cells['cy'].round().astype('int')
+        cluster = cells['Cluster_ward'].astype('int')
+        aggregate = cells['Cluster_agg'].astype('int')
+
+        profile = cells_clean.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99, np.std])
+        profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
+        profile = cells_clean.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99, np.std])
+        profiles.append(pd.concat([profile], keys=['AtoClean'], names=['Gene']))
+
+        profile = cells.groupby([cluster, cy])['mCherry'].agg([np.mean, self.q99, np.std])
+        profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
+        profile = cells.groupby([aggregate, cy])['mCherry'].agg([np.mean, self.q99, np.std])
+        profiles.append(pd.concat([profile], keys=['Ato'], names=['Gene']))
+
+        profile = cells.groupby(['Gene', cluster, cy])['RelVenus'].agg([np.mean, self.q99, np.std])
+        profiles.append(profile)
+        profile = cells.groupby(['Gene', aggregate, cy])['RelVenus'].agg([np.mean, self.q99, np.std])
+        profiles.append(profile)
+
+        self._r_profiles = pd.concat(profiles)
 
     def genes(self):
         if self._genes is None:

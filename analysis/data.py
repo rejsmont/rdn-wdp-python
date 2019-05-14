@@ -15,18 +15,6 @@ class DiscData:
     BAD_GENES = ['beat-IIIc', 'CG17378', 'CG31176', 'lola-P', 'nmo', 'CG30343', 'siz', 'sNPF', 'spdo', 'Vn']
     BAD_SAMPLES = ['J0RYWJ', '3SKX4V', '7AMINR', '4EAAEF', 'VH2DCR', 'WJ8F8M', 'ZNVOPe', 'APKoAe', 'zfroDh',
                    'lgxpL6', 'pcTNzE', '80IkVQ', 'UQZJ3K']
-    BAD_SEGMENTATION = ['4JBUL9', 'iR8dRr', 'DP026C', 'M16RU7', 'SUM9J1', 'U6I1AU',
-                        '3ACQ9G', 'N44DGI', 'DJCSO8', 'I50aWV', 'K7Z736', '2WGFS6',
-                        'U83TV8', '8O390U', 'HHTZYR', '00XPV8', 'R4DM2J', '0JHFR9',
-                        'TFDL12', 'AVU1IU', 'HK94X1', 'hZqrt6', 'JZ3JMW', 'TGF7PS',
-                        'NVFOVJ', 'UQZJ3K', 'jO60x8', 'B6VI9Z', 'YIRWN0', 'VWY8F7',
-                        'YV5WS7', 'FWKECB', '8XMOYH', 'pcTNzE', 'MPPQAH', '0BLH7D',
-                        'vTdokD', '9UZZ89', 'CIC2MN', 'FMJIUN', 'SPIEnu', 'XMPFVP',
-                        'S3V42Z', 'OUZDKY', 'UXWCJN', '1M9HV1', 'INY5MS', 'P8wx2r',
-                        'S71NTY', 'YVWYEX', '988JF7', 'PFQ5ZI', '2XZPQJ', 'QQ2M12',
-                        '4B7A64', 'W7GCED', 'WJ8F8M', '2YESFH', '4EAAEF', 'EXM95X',
-                        '9QOALF', '2PTAYA', 'H8MQMN', 'UVXACM', 'CNYWCK', 'BB2ZVQ',
-                        'Q1UDZJ', 'S6WN8L', '4bZ8wf']
 
     SYNONYMS = {'CG1625': 'dila', 'CG6860': 'Lrch', 'CG8965': 'rau', 'HLHmdelta': 'E(spl)mdelta-HLH',
                 'king-tubby': 'ktub', 'n-syb': 'nSyb'}
@@ -54,7 +42,7 @@ class DiscData:
 
     def from_data_frame(self, data):
         if data is not None and (isinstance(data, pd.DataFrame) and not data.empty):
-            self._cells = data
+            self._cells = data.dropna()
             return True
         else:
             return False

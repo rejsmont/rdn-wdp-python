@@ -34,19 +34,21 @@ class CellStats:
         ax.axvline(vol.mean() * 1.5, linestyle='dashed', color='black')
         ax.set_ylabel(r'Cell count ($10^3$)')
         ax.yaxis.set_major_formatter(tkr.FuncFormatter(self.thousand))
-        ax.set_xlabel(r'Cell volume [$\mu m^3$]')
+        ax.set_xlabel(r'Nuclear volume [$\mu m^3$]')
         ax.set_xlim([0, 80])
 
     def sample_size_hist(self, ax):
         bins = self.data.cells.groupby(['Sample'])['Volume'].mean() * self.VOL_SCALING
         ax.hist(bins, bins=20, range=(20, 40))
+        ax.axvline(self.data.cells['Volume'].mean() * self.VOL_SCALING, color='black')
         ax.set_ylabel(r'Disc count')
-        ax.set_xlabel(r'Cell volume [$\mu m^3$]')
+        ax.set_xlabel(r'Nuclear volume [$\mu m^3$]')
         ax.set_xlim([20, 40])
 
     def sample_count_hist(self, ax):
         bins = self.data.cells.groupby(['Sample'])['Volume'].count()
         ax.hist(bins, bins=20, range=(0, 20000))
+        ax.axvline(bins.mean(), color='black')
         ax.set_ylabel(r'Disc count')
         ax.set_xlabel(r'Cell count ($10^3$)')
         ax.set_xlim([0, 20000])
@@ -56,6 +58,7 @@ class CellStats:
         mf = round(self.data.cells['cy']) == 0
         bins = self.data.cells[mf].groupby(['Sample'])['mCherry_orig'].mean()
         ax.hist(bins, bins=20, range=(0, 64))
+        ax.axvline(self.data.cells[mf]['mCherry_orig'].mean(), color='black')
         ax.set_ylabel(r'Disc count')
         ax.set_xlabel(r'MF Ato mean [$au$]')
 

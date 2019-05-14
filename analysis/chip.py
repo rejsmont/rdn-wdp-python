@@ -38,7 +38,6 @@ class ChIP:
         try:
             with open(datafile) as f:
                 reader = csv.reader(f, delimiter='\t')
-                print(DiscData.SYNONYMS.keys())
                 for peak in reader:
                     gene = GTFFeature(peak[10:19])
                     if gene.name in DiscData.SYNONYMS.keys():

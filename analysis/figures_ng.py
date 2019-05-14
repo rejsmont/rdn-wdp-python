@@ -57,6 +57,11 @@ class Figure:
     def name(self):
         return self.__class__.__name__
 
+    def ax(self, *args, **kwargs):
+        ax = plt.Axes(self.fig, *args, **kwargs)
+        self.fig.add_axes(ax)
+        return ax
+
 
 class Plot:
 
@@ -66,7 +71,10 @@ class Plot:
         self.ax = None
 
     def plot(self, position, *args, **kwargs):
-        self.ax = self.fig.add_subplot(position)
+        if isinstance(position, gridspec.SubplotSpec):
+            self.ax = self.fig.add_subplot(position)
+        else:
+            self.ax = position
 
     def legend(self, position, *args, **kwargs):
         pass
@@ -155,7 +163,10 @@ class ProfilePlot(Plot):
         self.format_axis()
 
     def legend(self, position, ncol=1, loc='upper center', *args, **kwargs):
-        ax = self.fig.add_subplot(position)
+        if isinstance(position, gridspec.SubplotSpec):
+            ax = self.fig.add_subplot(position)
+        else:
+            ax = position
         ax.set_axis_off()
         handles, labels = self.ax.get_legend_handles_labels()
         ax.legend(handles, labels, ncol=ncol, loc=loc, frameon=False, fontsize=18)
@@ -165,7 +176,7 @@ class ProfilePlot(Plot):
         x = data.index
         y = self.preprocessor(data.values)
         style = style if style is not None else {}
-        self.ax.plot_img(x, y, label=profile, **style)
+        self.ax.plot(x, y, label=profile, **style)
 
     def plot_profiles(self):
         styles = self.styles()
@@ -203,7 +214,7 @@ class APProfilePlot(ProfilePlot):
 class MFProfilePlot(ProfilePlot):
     @staticmethod
     def x_lim():
-        return [MF_MIN, MF_MAX]
+        return [DiscData.FURROW_MIN, DiscData.FURROW_MAX]
 
 
 class DVProfilePlot(ProfilePlot):
@@ -239,10 +250,13 @@ class DiscThumb(Plot):
         self.ax.set_ylim(self.y_lim())
 
     def legend(self, position, *args, **kwargs):
-        ax = self.fig.add_subplot(position)
+        if isinstance(position, gridspec.SubplotSpec):
+            ax = self.fig.add_subplot(position)
+        else:
+            ax = position
         cb = self.fig.colorbar(self.img, cax=ax, orientation='horizontal', ticks=self.v_ticks(),
                                format=self.v_axis_formatter())
-        cb.set_label(label=self.title, fontsize=18)
+        cb.set_label(label=self.title, **kwargs)
         if self.v_scale() == 'log' and self.v_minor_ticks():
             ticks = self.img.norm(self.v_minor_ticks())
             cb.ax.xaxis.set_ticks(ticks, minor=True)
@@ -310,7 +324,7 @@ class MultiCellPlot(Plot):
              label='left', *args, **kwargs):
         super().plot(position, *args, **kwargs)
         self.ax.tick_params(bottom=(lastrow or controw),
-                            top=((firstrow and not lastrow) or controw),
+                            top=(firstrow and not lastrow),
                             labelbottom=lastrow,
                             labeltop=(firstrow and not lastrow),
                             left=(label == 'left'),
@@ -348,7 +362,7 @@ class Figure_3d51(Figure):
         rows = 3
         columns = 3
         height_ratios = [item for sub in [[8] * rows, [1]] for item in sub]
-        ogs = gridspec.GridSpecFromSubplotSpec(rows, columns, subplot_spec=self.gs[0], height_ratios=height_ratios)
+        ogs = gridspec.GridSpecFromSubplotSpec(rows + 1, columns, subplot_spec=self.gs[0], height_ratios=height_ratios)
         thumbs = []
         pos = 0
         for row, gene in enumerate(['Ato', 'AtoClean', 'ato']):
@@ -393,7 +407,7 @@ class Figure_3d51(Figure):
         ato_dv['Protein (clean) mean'] = dv_profiles.loc['AtoClean']['mean']
         plots.append(self.DVGeneProfilePlot(self.fig, ato_dv))
 
-        ogs = gridspec.GridSpecFromSubplotSpec(1, columns, subplot_spec=self.gs[2])
+        ogs = gridspec.GridSpecFromSubplotSpec(1, columns, subplot_spec=self.gs[1])
 
         def build_handles_labels(h, l, legend):
             new_h, new_l = legend
@@ -409,7 +423,7 @@ class Figure_3d51(Figure):
             plot.plot(ogs[col], text=text, firstrow=False, lastrow=True)
             build_handles_labels(handles, labels, plot.ax.get_legend_handles_labels())
 
-        ax = self.fig.add_subplot(self.gs[3])
+        ax = self.fig.add_subplot(self.gs[1])
         ax.set_axis_off()
         ax.legend(handles, labels, ncol=3, loc='center', frameon=False, fontsize=18)
         super().plot()
@@ -718,23 +732,49 @@ class Figurea2a8(Figure):
         self.ratios = None
 
     def compute(self):
-        profiles = self.data.profiles()
         cells = self.data.cells()[self.data.furrow_mask() & ~self.data.bad_gene_mask()]
 
         high_ato = self.data.AGGREGATE_NAMES.inverse['high-ato'][0]
         no_ato = self.data.AGGREGATE_NAMES.inverse['no-ato'][0]
+        fields = ['Venus', 'Gene']
 
-        ratios = (profiles.xs(high_ato, level=1).loc[:, 'mean'] /
-                  profiles.xs(no_ato, level=1).loc[:, 'mean']).groupby('Gene')
-        cell_ratio = (cells.loc[cells['Cluster_agg'] == high_ato, ['Venus', 'Gene']].groupby('Gene').mean()) / \
-                     (cells.loc[cells['Cluster_agg'] == no_ato, ['Venus', 'Gene']].groupby('Gene').mean())
-        cell_ratio = cell_ratio['Venus'].rename('Expression ratio (mean)')
+        cells_high = cells['Cluster_agg'] == high_ato
+        cells_no = cells['Cluster_agg'] == no_ato
+
+        group_cells_high = cells.loc[cells_high, fields].groupby('Gene')
+        group_cells_no = cells.loc[cells_no, fields].groupby('Gene')
+
+        t = {}
+        for group in group_cells_high.groups.keys():
+            s, p = stats.ttest_ind(group_cells_high.get_group(group)['Venus'],
+                                   group_cells_no.get_group(group)['Venus'], equal_var=False)
+            if p <= 0.0001 / len(group_cells_high.groups):
+                a = '****'
+            elif p <= 0.001 / len(group_cells_high.groups):
+                a = '***'
+            elif p <= 0.01 / len(group_cells_high.groups):
+                a = '**'
+            elif p <= 0.05 / len(group_cells_high.groups):
+                a = '*'
+            else:
+                a = 'ns'
+            t[group] = (s, p, a)
+        t_stats = pd.DataFrame(t).T
+        t_stats.columns = ['s', 'p', 'a']
+
+        cell_ratio = group_cells_high['Venus'].mean() / group_cells_no['Venus'].mean()
+        cell_ratio = cell_ratio.rename('Expression ratio (mean)')
+
+        cell_ratio_sem = np.sqrt(np.square(group_cells_high['Venus'].sem() / group_cells_high['Venus'].mean()) +
+                                 np.square(group_cells_no['Venus'].sem() / group_cells_no['Venus'].mean())) * cell_ratio
+        cell_ratio_sem = cell_ratio_sem.rename('Expression ratio (SEM)')
+
         peaks = chip.peaks().groupby('Gene').agg(['sum', 'count'])
-        max_ratio = ratios.max().rename('Exprofile ratio (max)')
         ato_p_area = peaks.loc[:, ('p_area', 'sum')].rename('Peak area')
         ato_p_num = peaks.loc[:, ('p_area', 'count')].rename('Peak count')
 
-        self.ratios = pd.DataFrame([cell_ratio, max_ratio, ato_p_area, ato_p_num]).transpose()
+        self.ratios = pd.DataFrame([cell_ratio, cell_ratio_sem, ato_p_area, ato_p_num]).transpose()
+        self.ratios = self.ratios.join(t_stats)
 
     def plot(self):
         if self.ratios is None:
@@ -753,7 +793,7 @@ class Figurea2a8(Figure):
         ax.scatter(x, y)
         gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         ry = gradient * x + intercept
-        ax.plot_img(x, ry)
+        ax.plot(x, ry)
         ax.text(0.075, 0.9, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
                 fontsize=12, transform=ax.transAxes)
         x = ratiosN['Peak area']
@@ -763,7 +803,7 @@ class Figurea2a8(Figure):
         y = ratios['Expression ratio (mean)']
         gradient, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         ry = gradient * x + intercept
-        ax.plot_img(x, ry)
+        ax.plot(x, ry)
         ax.text(0.075, 0.85, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
                 fontsize=12, transform=ax.transAxes, color='r')
 
@@ -787,10 +827,15 @@ class Figurea2a8(Figure):
         ax = self.fig.add_subplot(self.gs[2:])
         ratios = self.ratios.sort_index()
         y = ratios['Expression ratio (mean)'].dropna()
+        e = ratios['Expression ratio (SEM)'].dropna()
         x = np.arange(y.count())
+        a = ratios['a'].dropna()
         labels = list(y.index.values)
         ax.axhline(y=1, color='C3')
         barlist = ax.bar(x, y)
+        errors = ax.errorbar(x, y, fmt='none', yerr=e, ecolor='black', capsize=5)
+        for i, v in enumerate(x):
+            ax.text(x[i], y[i] + e[i] + 0.025, a[i], ha='center', fontsize=8)
         barlist[21].set_color('C1')
         ax.set_xlabel('Target gene')
         ax.set_ylabel('Target expression fold change')
@@ -798,7 +843,6 @@ class Figurea2a8(Figure):
         ax.set_xticklabels(labels_chip, {'weight': 'bold'}, rotation=45, ha='right')
         ax.set_xticks([labels.index(l) for l in labels if l not in labels_chip], minor=True)
         ax.set_xticklabels([l for l in labels if l not in labels_chip], rotation=45, ha='right', minor=True)
-        print(labels)
 
 
 if __name__ == "__main__":
@@ -830,24 +874,29 @@ if __name__ == "__main__":
 
     data = DiscData(args.data)
     clustering = Clustering(args.data, disc_data=data, args=args)
-    clustered = ClusteredData(clustering.cells)
+    clustered = ClusteredData(clustering)
     if args.chip:
-        chip = ChIP(args.chip, data.genes())
+       chip = ChIP(args.chip, data.genes())
     else:
-        chip = None
+       chip = None
+
+
+    #fig9d28 = Figure_3d51(data)
+    #fig9d28.show()
 
     # fig9d28 = Figure9d28(clustering)
     # fig9d28.show()
 
     #fig7895 = Figure7895(clustering)
+    #fig7895.show()
     #fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
 
     fig0ac7 = Figure0ac7(clustered)
     fig0ac7.show()
-
+    #
     fig7e0b = Figure7e0b(clustered)
     fig7e0b.show()
-
+    #
     figa2a8 = Figurea2a8(clustered, chip)
     figa2a8.show()
 
