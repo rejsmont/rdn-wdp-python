@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import colorcet as cc
 import logging
 import math
 import matplotlib.pyplot as plt
@@ -51,6 +52,10 @@ class Figure_1(Figure):
     SAMPLE = 'K21OU5'
     SLICE = 40
     BONDS = [(0, 32), (0, 4000), (0, 16)]
+    # SAMPLE = 'iJbqq8'
+    # SLICE = 58
+    # BONDS = [(0, 32), (0, 4000), (0, 180)]
+
 
     def __init__(self, stats, image, thumbs):
         super().__init__(None)
@@ -153,7 +158,7 @@ class Figure_2(Figure):
         for row, gene in enumerate(['AtoClean', 'ato']):
             matrix = matrices.loc[gene]
             thumbs = [self.GeneDiscThumb(self.fig, matrix['mean'], r'Mean expression'),
-                      self.ExtDiscThumb(self.fig, matrix['ext'], r'Max eccentricity')]
+                      self.ExtDiscThumb(self.fig, matrix['ext'], r'Max prominence')]
 
             ax = self.ax([0.075, 1 - ((row + 1) * 0.22 + row * 0.03), 0.4, 0.17])
             thumbs[0].plot(ax)
@@ -313,7 +318,7 @@ class Figure_3(Figure):
 
         ax = self.ax([0.1, 0.1, 0.525, 0.025])
         cb = self.fig.colorbar(sc, cax=ax, orientation='horizontal')
-        cb.set_label(label='Ato eccentricity')
+        cb.set_label(label='Ato prominence')
 
         # Plot fraction of cells that belong to a cluster
 
@@ -644,6 +649,41 @@ class Figure_4(Figure):
         ax.text(-0.107, 1.1, 'd', color='black', transform=ax.transAxes, va='top', fontsize=12)
 
 
+class Figure_S3(Figure):
+
+    SAMPLE = '1Q8GA8'
+    SLICE = 55
+
+
+    def __init__(self, image):
+        super().__init__(None)
+        self.h5 = image
+
+    def plot(self):
+        self.fig = plt.figure(figsize=mm2inch(180, 95))
+        ax = self.ax([0.01, 0.525, 0.49, 0.45])
+        self.h5.plot_img(self.SLICE, ax=ax, bonds=(0, 2048), datasets='scaled/DAPI', cmap=cc.cm.kgy)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'a', fontsize=12, fontweight='bold')
+        ax = self.ax([0.5, 0.525, 0.49, 0.45])
+        self.h5.plot_img(self.SLICE, ax=ax, datasets='weka/nuclei', cmap=cc.cm.fire)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'b', fontsize=12, fontweight='bold')
+        ax = self.ax([0.01, 0.025, 0.49, 0.45])
+        self.h5.plot_img(self.SLICE, ax=ax, bonds=(0, 0.20), datasets='segmentation/DoG', cmap=cc.cm.CET_L16)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'c', fontsize=12, fontweight='bold')
+        ax = self.ax([0.5, 0.025, 0.49, 0.45])
+        cm = plt.cm.get_cmap("gray")
+        cm1 = cm(np.linspace(0, 1, 1))
+        cm2 = cc.cm.glasbey(np.linspace(0, 1, 255))
+        ccm = np.vstack((cm1, cm2))
+        mcm = colors.LinearSegmentedColormap.from_list('glasbey_black', ccm)
+        self.h5.plot_img(self.SLICE, ax=ax, datasets='segmentation/objects', cmap=mcm)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'd', fontsize=12, fontweight='bold')
+
+
 if __name__ == "__main__":
     plt.rc('font', size=8)
     o_data = OriginalData(f)
@@ -670,3 +710,9 @@ if __name__ == "__main__":
     fig_4 = Figure_4(clustered, chip)
     fig_4.show()
     fig_4.save(e + '/fig_4.pdf')
+
+    h5 = Qimage(d, Figure_S3.SAMPLE)
+    thumbs = Thumbnails(d + '/thumbs', Figure_S3.SAMPLE)
+    fig_s3 = Figure_S3(h5)
+    fig_s3.show()
+    fig_s3.save(e + '/fig_s3.pdf')

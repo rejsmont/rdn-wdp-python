@@ -3,9 +3,12 @@ import pandas as pd
 import math
 import os
 from sklearn.linear_model import LinearRegression
+from clustering import Clustering, ClusteredData
+from data import DiscData
 
 orig_dir = '/Users/rejsmont/Google Drive File Stream/My Drive/Projects/RDN-WDP/samples'
 proc_dir = '/Users/rejsmont/Google Drive File Stream/My Drive/Projects/RDN-WDP/samples/processed'
+cl = '/Users/rejsmont/Google Drive File Stream/My Drive/Projects/RDN-WDP//processing/clustering/bigc100k6n20r1000_metadata.yml'
 combined = '/Users/rejsmont/Google Drive File Stream/My Drive/Projects/RDN-WDP/processing/samples-combined.csv'
 
 
@@ -82,3 +85,7 @@ result = res[['Gene', 'Sample', 'Particle', 'cx_orig', 'cy_orig', 'cz_orig', 'cx
 result = result.rename(index=str, columns={'Particle': 'Nucleus', 'cx_scaled': 'cx', 'cz_scaled': 'cz',
                                            'mCherry_scaled': 'mCherry', 'Venus_scaled': 'Venus',
                                            'DAPI_scaled': 'DAPI'})
+
+data = DiscData(result)
+clustering = Clustering(cl, disc_data=data)
+clustered = ClusteredData(clustering)

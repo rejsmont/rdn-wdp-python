@@ -53,7 +53,10 @@ class Qimage:
 
     @staticmethod
     def label(ax, label='a', **kwargs):
-        ax.text(0.025, 0.95, label, color='white', transform=ax.transAxes, va='top', **kwargs)
+        if 'color' in kwargs.keys():
+            ax.text(0.025, 0.95, label, transform=ax.transAxes, va='top', **kwargs)
+        else:
+            ax.text(0.025, 0.95, label, color='white', transform=ax.transAxes, va='top', **kwargs)
 
     @staticmethod
     def format_ax(ax):
@@ -64,7 +67,7 @@ class Qimage:
         ax.get_xaxis().set_ticks([])
         ax.get_yaxis().set_ticks([])
 
-    def plot_img(self, img_slice, bonds=None, ax=None, datasets=None):
+    def plot_img(self, img_slice, bonds=None, ax=None, datasets=None, cmap=None):
 
         if datasets is None:
             datasets = self.CHANNELS
@@ -79,9 +82,15 @@ class Qimage:
                     imgs.append(self.normalize(self.image(ds, img_slice)))
             img = np.stack(imgs, axis=-1)
         else:
-            img = self.image(datasets, img_slice)
-
-        ax.imshow(img)
+            if bonds is not None:
+                min, max = bonds
+                img = self.normalize(self.image(datasets, img_slice), min, max)
+            else:
+                img = self.image(datasets, img_slice)
+        if cmap is None:
+            ax.imshow(img)
+        else:
+            ax.imshow(img, cmap=cmap)
         self.format_ax(ax)
 
     def plot_simg(self, img_slice, bonds=None, ax=None, reference=None):

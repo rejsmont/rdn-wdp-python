@@ -435,7 +435,7 @@ class Figure_79eb(Figure_3d51):
         super().__init__(data)
         self.columns = columns
         self.genes = self.data.genes_sorted()
-        self.genes.remove('ato')
+        #self.genes.remove('ato')
         self.rows = math.ceil(len(self.genes) / self.columns)
 
     def plot(self):
@@ -489,7 +489,8 @@ class Figure_79eb(Figure_3d51):
         for pid, plot in enumerate(plots):
             pos = igs[pid] if pid < 3 else igs[:, -1]
             plot.legend(pos)
-        super().plot()
+
+        Figure.plot(self)
 
 
 class Figure9d28(Figure):
@@ -844,6 +845,7 @@ class Figurea2a8(Figure):
         ax.set_xticks([labels.index(l) for l in labels if l not in labels_chip], minor=True)
         ax.set_xticklabels([l for l in labels if l not in labels_chip], rotation=45, ha='right', minor=True)
 
+e = '/Users/rejsmont/Google Drive File Stream/My Drive/Projects/Figures'
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot all data.')
@@ -880,9 +882,14 @@ if __name__ == "__main__":
     else:
        chip = None
 
+    fig79eb = Figure_79eb(data)
+    #fig79eb.show()
+    fig79eb.save(os.path.join(e, 'fig79eb.pdf'))
 
-    #fig9d28 = Figure_3d51(data)
+    fig9d28 = Figure_3d51(data)
     #fig9d28.show()
+    fig9d28.save(os.path.join(e, 'fig9d28.pdf'))
+
 
     # fig9d28 = Figure9d28(clustering)
     # fig9d28.show()
@@ -892,11 +899,17 @@ if __name__ == "__main__":
     #fig7895.save(os.path.join(args.outdir, 'fig7895.png'))
 
     fig0ac7 = Figure0ac7(clustered)
-    fig0ac7.show()
+    #fig0ac7.show()
+    fig0ac7.save(os.path.join(e, 'fig0ac7.pdf'))
+
     #
     fig7e0b = Figure7e0b(clustered)
-    fig7e0b.show()
+    #fig7e0b.show()
+    fig7e0b.save(os.path.join(e, 'fig7e0b.pdf'))
+
     #
     figa2a8 = Figurea2a8(clustered, chip)
-    figa2a8.show()
+    #figa2a8.show()
+    figa2a8.save(os.path.join(e, 'figa2a8.pdf'))
+
 
