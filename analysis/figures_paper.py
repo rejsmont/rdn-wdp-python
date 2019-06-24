@@ -683,6 +683,104 @@ class Figure_S3(Figure):
         self.h5.scalebar(ax, linewidth=3)
         self.h5.label(ax, 'd', fontsize=12, fontweight='bold')
 
+class Figure_S5(Figure):
+
+    class GeneProfilePlot(LogScaleGenePlot, SmoothProfilePlot, APProfilePlot):
+        def format_axis(self):
+            super().format_axis()
+            self.ax.set_ylabel(r'Mean expression')
+            self.ax.set_xlabel(r'A-P position')
+
+        @staticmethod
+        def v_lim():
+            return [0.2, 5]
+
+        @staticmethod
+        def x_lim():
+            return [-10, 40]
+
+        @staticmethod
+        def v_ticks(): return [0.2, 0.5, 1, 2, 5]
+
+    class GeneDiscThumb(LogScaleGenePlot, DiscThumb):
+        @staticmethod
+        def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
+
+        @staticmethod
+        def v_minor_ticks(): return False
+
+    class ExtDiscThumb(LogScaleExtPlot, DiscThumb):
+        @staticmethod
+        def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
+
+        @staticmethod
+        def v_minor_ticks(): return False
+
+    SAMPLE = 'iJbqq8'
+    SLICE = 60
+    BONDS = [(8, 32), (0, 4096), (0, 96)]
+
+    def __init__(self, image, data):
+        super().__init__(data)
+        self.h5 = image
+
+    def plot(self):
+        self.fig = plt.figure(figsize=mm2inch(180, 240))
+        ax = self.ax([0.01, 0.805, 0.49, 0.18])
+        self.h5.plot_img(None, ax=ax, bonds=(24, 64), datasets='scaled/mCherry', cmap=cc.cm.CET_L3)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'a', fontsize=12, fontweight='bold', color='cyan')
+        ax = self.ax([0.5, 0.805, 0.49, 0.18])
+        self.h5.plot_img(None, ax=ax, bonds=(0, 256), datasets='scaled/Venus', cmap=cc.cm.CET_L3)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'b', fontsize=12, fontweight='bold', color='cyan')
+        ax = self.ax([0.01, 0.620, 0.49, 0.18])
+        self.h5.plot_img(self.SLICE, ax=ax, bonds=(8, 32), datasets='scaled/mCherry', cmap=cc.cm.CET_L3)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'c', fontsize=12, fontweight='bold', color='cyan')
+        ax = self.ax([0.5, 0.620, 0.49, 0.18])
+        self.h5.plot_img(self.SLICE, ax=ax, bonds=(0, 96), datasets='scaled/Venus', cmap=cc.cm.CET_L3)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'd', fontsize=12, fontweight='bold', color='cyan')
+        ax = self.ax([0.01, 0.435, 0.49, 0.18])
+        self.h5.plot_img(self.SLICE, ax=ax, bonds=self.BONDS)
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'e', fontsize=12, fontweight='bold')
+        ax = self.ax([0.5, 0.435, 0.49, 0.18])
+        self.h5.plot_simg(self.SLICE, ax=ax, bonds=self.BONDS, reference='auto')
+        self.h5.scalebar(ax, linewidth=3)
+        self.h5.label(ax, 'f', fontsize=12, fontweight='bold')
+
+        matrices = self.data.matrices()
+
+        matrix = matrices.loc['Ato']
+        thumbs = [self.GeneDiscThumb(self.fig, matrix['mean'], r'Mean expression'),
+                  self.ExtDiscThumb(self.fig, matrix['ext'], r'Max prominence'),
+                  self.GeneDiscThumb(self.fig, matrix['max'], r'Max expression')]
+
+        ax = self.ax([0.067, 0.25, 0.42, 0.15])
+        thumbs[0].plot(ax)
+        ax.text(-0.125, 1.175, 'g', color='black', transform=ax.transAxes, va='top', fontsize=12)
+        ax = self.ax([0.560, 0.25, 0.42, 0.15])
+        thumbs[1].plot(ax)
+        ax.text(-0.125, 1.175, 'h', color='black', transform=ax.transAxes, va='top', fontsize=12)
+
+        ax = self.ax([0.067, 0.045, 0.42, 0.15])
+        thumbs[2].plot(ax)
+        ax.text(-0.125, 1.175, 'i', color='black', transform=ax.transAxes, va='top', fontsize=12)
+
+        profiles = self.data.profiles()
+        ato_protein = pd.DataFrame()
+        ato_protein['Protein Mean'] = profiles.loc['Ato']['mean']
+        ato_protein['Protein (clean) mean'] = profiles.loc['AtoClean']['mean']
+        styles = {
+            'Protein Mean': {'linestyle': 'dotted', 'color': '#2ca02c'},
+            'Protein (clean) mean': {'color': '#2ca02c'},
+        }
+        ax = self.ax([0.575, 0.045, 0.402, 0.15])
+        self.GeneProfilePlot(self.fig, ato_protein, styles=styles).plot(ax)
+        ax.text(-0.15, 1.175, 'j', color='black', transform=ax.transAxes, va='top', fontsize=12)
+
 
 if __name__ == "__main__":
     plt.rc('font', size=8)
@@ -712,7 +810,11 @@ if __name__ == "__main__":
     fig_4.save(e + '/fig_4.pdf')
 
     h5 = Qimage(d, Figure_S3.SAMPLE)
-    thumbs = Thumbnails(d + '/thumbs', Figure_S3.SAMPLE)
     fig_s3 = Figure_S3(h5)
     fig_s3.show()
     fig_s3.save(e + '/fig_s3.pdf')
+
+    h5 = Qimage(d, Figure_S5.SAMPLE)
+    fig_s5 = Figure_S5(h5, data)
+    fig_s5.show()
+    fig_s5.save(e + '/fig_s5.pdf')

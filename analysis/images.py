@@ -32,7 +32,7 @@ class Qimage:
     def image(self, dataset, img_slice=None):
         ds = self.h5[dataset]
         if img_slice is None:
-            return ds
+            return ds[:, :, :]
         else:
             return ds[img_slice, :, :]
 
@@ -75,18 +75,27 @@ class Qimage:
         if isinstance(datasets, list):
             imgs = []
             for i, ds in enumerate(datasets):
+                if img_slice is None:
+                    img = np.max(self.image(ds), axis=0)
+                else:
+                    img = self.image(ds, img_slice)
+
                 if bonds is not None:
                     min, max = bonds[i]
-                    imgs.append(self.normalize(self.image(ds, img_slice), min, max))
+                    imgs.append(self.normalize(img, min, max))
                 else:
-                    imgs.append(self.normalize(self.image(ds, img_slice)))
+                    imgs.append(img)
             img = np.stack(imgs, axis=-1)
         else:
-            if bonds is not None:
-                min, max = bonds
-                img = self.normalize(self.image(datasets, img_slice), min, max)
+            if img_slice is None:
+                img = np.max(self.image(datasets), axis=0)
             else:
                 img = self.image(datasets, img_slice)
+
+            if bonds is not None:
+                min, max = bonds
+                img = self.normalize(img, min, max)
+
         if cmap is None:
             ax.imshow(img)
         else:
@@ -140,9 +149,9 @@ class Qimage:
         ax.set_facecolor('black')
         self.format_ax(ax)
 
-    @staticmethod
-    def normalize(a, min, max):
-        v = (a - min) / (max - min)
+    def normalize(self, a, min, max):
+        v = (a.astype('float64') - min)
+        v = v / (max - min)
         v = np.clip(v, 0, 1)
         return v
 
