@@ -980,19 +980,13 @@ class Figure_S7(Figure):
 
             return dists, gene_profiles
 
-        w = 0.175
-        h = 0.12
-        wr = 1.125
-        hr = 1.5
-
         genes = ['ato',
-                 'Brd', 'betaTub60D', 'CG2556', 'CG9801', 'E(spl)mdelta-HLH',
-                 'Fas2', 'nvy', 'sca', 'sens', 'seq', 'rau',
-                 'Abl', 'CG13928', 'CG17724', 'CG32150', 'DAAM', 'dila', 'ktub', 'Lrch', 'scrt',
-                 'CG15097', 'dpr9', 'nSyb',
-                 'dap', 'SRPK']
-
-
+                 'Brd', 'CG2556', 'CG9801', 'E(spl)mdelta-HLH',
+                 'Fas2', 'nvy', 'sca', 'sens', 'seq',
+                 'CG13928', 'Lrch', 'rau', 'SRPK',
+                 'CG17724', 'CG32150', 'DAAM', 'scrt', 'CG15097',
+                 'Abl', 'betaTub60D', 'dap',
+                 'dila', 'dpr9', 'ktub', 'nSyb']
 
         cols = 2
         rows = math.ceil(len(genes)/cols)
@@ -1012,55 +1006,47 @@ class Figure_S7(Figure):
             ax = self.ax([0.575 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
             gene_profile(ax, profs)
 
-            # ax = self.ax([0.05 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
-            #
-            # ax = self.ax([0.35 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
-            #
-            # ax = self.ax([0.70 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
-
-            # ax.text(0.975, 0.95, gene, color='black', transform=ax.transAxes, ha='right', va='top', fontsize=10)
-
 
 if __name__ == "__main__":
     plt.rc('font', size=8)
     o_data = OriginalData(f)
     data = DiscData(o_data.cells)
 
-    # h5 = Qimage(d, Figure_2.SAMPLE)
-    # thumbs = Thumbnails(d + '/thumbs', Figure_2.SAMPLE)
-    # stats = CellStats(o_data)
-    # fig_2 = Figure_2(stats, h5, thumbs)
-    # fig_2.show()
-    # fig_2.save(e + '/fig_2.pdf')
-    # fig_3 = Figure_3(data)
-    # fig_3.show()
-    # fig_3.save(e + '/fig_3.pdf')
-    #
+    h5 = Qimage(d, Figure_2.SAMPLE)
+    thumbs = Thumbnails(d + '/thumbs', Figure_2.SAMPLE)
+    stats = CellStats(o_data)
+    fig_2 = Figure_2(stats, h5, thumbs)
+    fig_2.show()
+    fig_2.save(e + '/fig_2.pdf')
+    fig_3 = Figure_3(data)
+    fig_3.show()
+    fig_3.save(e + '/fig_3.pdf')
+
     clustering = Clustering(cl, disc_data=data)
     clustered = ClusteredData(clustering)
-    #
-    # fig_4 = Figure_4(clustered)
-    # fig_4.show()
-    # fig_4.save(e + '/fig_4.pdf')
-    #
-    # chip = ChIP(ch, data.genes())
-    # fig_5 = Figure_5(clustered, chip)
-    # fig_5.show()
-    # fig_5.save(e + '/fig_5.pdf')
-    #
-    # h5 = Qimage(d, Figure_S3.SAMPLE)
-    # fig_s3 = Figure_S3(h5)
-    # fig_s3.show()
-    # fig_s3.save(e + '/fig_s3.pdf')
-    #
-    # h5 = Qimage(d, Figure_S5.SAMPLE)
-    # fig_s5 = Figure_S5(h5, data)
-    # fig_s5.show()
-    # fig_s5.save(e + '/fig_s5.pdf')
-    #
-    # fig_s6 = Figure_S6(data)
-    # fig_s6.show()
-    # fig_s6.save(e + '/fig_s6.pdf')
+
+    fig_4 = Figure_4(clustered)
+    fig_4.show()
+    fig_4.save(e + '/fig_4.pdf')
+
+    chip = ChIP(ch, data.genes())
+    fig_5 = Figure_5(clustered, chip)
+    fig_5.show()
+    fig_5.save(e + '/fig_5.pdf')
+
+    h5 = Qimage(d, Figure_S3.SAMPLE)
+    fig_s3 = Figure_S3(h5)
+    fig_s3.show()
+    fig_s3.save(e + '/fig_s3.pdf')
+
+    h5 = Qimage(d, Figure_S5.SAMPLE)
+    fig_s5 = Figure_S5(h5, data)
+    fig_s5.show()
+    fig_s5.save(e + '/fig_s5.pdf')
+
+    fig_s6 = Figure_S6(data)
+    fig_s6.show()
+    fig_s6.save(e + '/fig_s6.pdf')
 
     fig_s7 = Figure_S7(clustered)
     fig_s7.show()
