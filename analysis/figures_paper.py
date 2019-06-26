@@ -580,7 +580,6 @@ class Figure_5(Figure):
         ax = self.ax([0.6 + w * wr, 0.975 - h - row * h * hr, w, h])
         gene_profile(ax, profs)
 
-
         # (Ato ChIP peak area) vs (Target expression fold change)
         ax = self.ax([0.1, 0.40, 0.375, 0.2])
         ratios = self.ratios.dropna().sort_values('Peak area')
@@ -592,7 +591,7 @@ class Figure_5(Figure):
         gradient, intercept, r_value, p_value, std_err = linregress(x, y)
         ry = gradient * x + intercept
         ax.plot(x, ry)
-        ax.text(0.075, 0.9, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
+        ax.text(0.03, 0.9, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2E}'.format(p_value),
                 fontsize=8, transform=ax.transAxes, color='C0')
         x = ratiosN['Peak area']
         y = ratiosN['Expression ratio (mean)']
@@ -602,7 +601,7 @@ class Figure_5(Figure):
         gradient, intercept, r_value, p_value, std_err = linregress(x, y)
         ry = gradient * x + intercept
         ax.plot(x, ry)
-        ax.text(0.075, 0.8, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2f}'.format(p_value),
+        ax.text(0.03, 0.8, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2E}'.format(p_value),
                 fontsize=8, transform=ax.transAxes, color='C1')
         ax.set_ylim(0.1, 3.5)
         ax.set_xlabel('Ato ChIP peak area')
@@ -834,6 +833,11 @@ class Figure_S6(Figure):
         rows = math.ceil(len(genes)/cols)
         self.fig = plt.figure(figsize=mm2inch(cols * 180, 40 * rows))
 
+        styles = {
+            'Reporter mean': {},
+            'Ato (protein) mean': {'color': '#2ca02c'},
+        }
+
         for i, gene in enumerate(genes):
 
             matrix = matrices.loc[gene]
@@ -856,8 +860,165 @@ class Figure_S6(Figure):
             ax = self.ax([0.35 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
             thumbs[1].plot(ax)
             ax = self.ax([0.70 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
-            self.GeneProfilePlot(self.fig, ato_protein).plot(ax)
+            self.GeneProfilePlot(self.fig, ato_protein, styles=styles).plot(ax)
             ax.text(0.975, 0.95, gene, color='black', transform=ax.transAxes, ha='right', va='top', fontsize=10)
+
+
+class Figure_S7(Figure):
+
+    class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, SmoothProfilePlot):
+        @staticmethod
+        def v_lim():
+            return [0.1, 10]
+
+        @staticmethod
+        def v_ticks():
+            return [0.1, 0.2, 0.5, 1, 2, 5, 10]
+
+    def __init__(self, data):
+        super().__init__(data)
+
+    def plot(self):
+
+        self.fig = plt.figure(figsize=mm2inch(183, 200))
+
+        column = 'Cluster_' + self.data.clustering.method
+        cells = self.data.cells().loc[
+            self.data.acceptable_mask() &
+            self.data.furrow_mask() &
+            ~self.data.bad_gene_mask()
+            ]
+        profiles = self.data.profiles()
+        plist = self.data.CLUSTER_NAMES
+
+        order = [5, 3, 6, 2, 1, 4]
+        cmap = plt.cm.get_cmap('rainbow', 6)
+        styles = {
+            'Target mean R8': {'color': cmap(0)},
+            'Target mean MF-high': {'color': cmap(1)},
+            'Target mean MF': {'color': cmap(2)},
+            'Target mean post-MF': {'color': cmap(3)},
+            'Target mean pre-MF': {'color': cmap(4)},
+            'Target mean MF-ato': {'color': cmap(5)}
+        }
+
+        template = pd.DataFrame(index=pd.Index(range(int(DiscData.FURROW_MIN), int(DiscData.FURROW_MAX) + 1)))
+        for c in plist.keys():
+            template['Target mean ' + plist[c]] = np.nan
+
+        def trim(v, min=None, max=None, zc=None):
+            s = v.copy()
+            if min is not None:
+                s.loc[s < min] = min
+            if max is not None:
+                s.loc[s > max] = max
+            if zc is not None:
+                z = zscore(s)
+                s.loc[z > zc] = s[z <= zc].max()
+                s.loc[z < -zc] = s[z >= -zc].min()
+            return s.values
+
+        def bars(v):
+            d = trim(v, 0.1, 20, 3)
+            q25, q50, q75 = np.percentile(v, [25, 50, 75])
+
+            upper_adjacent_value = q75 + (q75 - q25) * 1.5
+            upper_adjacent_value = np.clip(upper_adjacent_value, q75, d.max())
+
+            lower_adjacent_value = q25 - (q75 - q25) * 1.5
+            lower_adjacent_value = np.clip(lower_adjacent_value, d.min(), q25)
+
+            return d, q50, q25, q75, lower_adjacent_value, upper_adjacent_value
+
+        def gene_violin(ax, data, gene, start=1):
+
+            end = start + len(data)
+            inds = np.arange(start, end)
+
+            values = [bars(v) for v in data]
+            d, m, q25, q75, w1, w2 = zip(*values)
+            parts = ax.violinplot(d, inds, widths=0.75, showmeans=False, showmedians=False, showextrema=False)
+            for i, pc in enumerate(parts['bodies']):
+                pc.set_facecolor(cmap(order[i] - 1))
+                pc.set_edgecolor('black')
+                pc.set_alpha(1)
+                pc.set_linewidth(0.25)
+
+            ax.scatter(inds, m, marker='o', color='white', s=10, zorder=3)
+            ax.vlines(inds, q25, q75, color='k', linestyle='-', lw=2)
+            ax.vlines(inds, w1, w2, color='k', linestyle='-', lw=0.5)
+
+            ax.set_xticks([])
+            ax.set_yscale('log')
+            ax.set_ylim(*self.GeneProfilePlot.v_lim())
+            ax.set_yticks(self.GeneProfilePlot.v_ticks())
+            labels = [LogScaleGenePlot.major_formatter_log(s, None) for s in self.GeneProfilePlot.v_ticks()]
+            labels[0] = '<.1'
+            labels[-1] = '10'
+            ax.set_yticklabels(labels)
+            ax.set_ylabel('Expression level')
+            ax.text(0.5, -0.20, gene, horizontalalignment='center', verticalalignment='center',
+                    fontsize=12, transform=ax.transAxes)
+
+        def gene_profile(ax, data):
+            plot = self.GeneProfilePlot(self.fig, data, styles)
+            plot.plot(ax, text=None, label='left',
+                      firstcol=False, firstrow=False,
+                      lastcol=False, lastrow=True)
+            ax.set_xlabel('A-P position')
+            ax.set_xticks([-8, -4, 0, 4, 8])
+
+        def gene_data(gene):
+            if gene == 'Ato':
+                dists = [cells.loc[cells[column] == cluster, 'mCherry'] for cluster in order]
+            else:
+                dists = [cells.loc[(cells[column] == cluster) & (cells['Gene'] == gene), 'Venus'] for cluster in order]
+            profile = profiles.loc[gene]
+            gene_profiles = template.copy()
+            for c in plist.keys():
+                gene_profiles['Target mean ' + plist[c]] = profile.loc[c]['mean']
+
+            return dists, gene_profiles
+
+        w = 0.175
+        h = 0.12
+        wr = 1.125
+        hr = 1.5
+
+        genes = ['ato',
+                 'Brd', 'betaTub60D', 'CG2556', 'CG9801', 'E(spl)mdelta-HLH',
+                 'Fas2', 'nvy', 'sca', 'sens', 'seq', 'rau',
+                 'Abl', 'CG13928', 'CG17724', 'CG32150', 'DAAM', 'dila', 'ktub', 'Lrch', 'scrt',
+                 'CG15097', 'dpr9', 'nSyb',
+                 'dap', 'SRPK']
+
+
+
+        cols = 2
+        rows = math.ceil(len(genes)/cols)
+        self.fig = plt.figure(figsize=mm2inch(cols * 120, 40 * rows))
+
+        for i, gene in enumerate(genes):
+
+            hc = 0.70 / rows
+            wc = 0.375 / cols
+            ht = (1 - (0.45 / rows)) / rows
+            col = i % 2
+            row = math.floor(i / 2)
+
+            dists, profs = gene_data(gene)
+            ax = self.ax([0.15 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            gene_violin(ax, dists, gene)
+            ax = self.ax([0.575 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            gene_profile(ax, profs)
+
+            # ax = self.ax([0.05 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            #
+            # ax = self.ax([0.35 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            #
+            # ax = self.ax([0.70 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+
+            # ax.text(0.975, 0.95, gene, color='black', transform=ax.transAxes, ha='right', va='top', fontsize=10)
 
 
 if __name__ == "__main__":
@@ -865,38 +1026,42 @@ if __name__ == "__main__":
     o_data = OriginalData(f)
     data = DiscData(o_data.cells)
 
-    h5 = Qimage(d, Figure_2.SAMPLE)
-    thumbs = Thumbnails(d + '/thumbs', Figure_2.SAMPLE)
-    stats = CellStats(o_data)
-    fig_2 = Figure_2(stats, h5, thumbs)
-    fig_2.show()
-    fig_2.save(e + '/fig_2.pdf')
-    fig_3 = Figure_3(data)
-    fig_3.show()
-    fig_3.save(e + '/fig_3.pdf')
-
+    # h5 = Qimage(d, Figure_2.SAMPLE)
+    # thumbs = Thumbnails(d + '/thumbs', Figure_2.SAMPLE)
+    # stats = CellStats(o_data)
+    # fig_2 = Figure_2(stats, h5, thumbs)
+    # fig_2.show()
+    # fig_2.save(e + '/fig_2.pdf')
+    # fig_3 = Figure_3(data)
+    # fig_3.show()
+    # fig_3.save(e + '/fig_3.pdf')
+    #
     clustering = Clustering(cl, disc_data=data)
     clustered = ClusteredData(clustering)
+    #
+    # fig_4 = Figure_4(clustered)
+    # fig_4.show()
+    # fig_4.save(e + '/fig_4.pdf')
+    #
+    # chip = ChIP(ch, data.genes())
+    # fig_5 = Figure_5(clustered, chip)
+    # fig_5.show()
+    # fig_5.save(e + '/fig_5.pdf')
+    #
+    # h5 = Qimage(d, Figure_S3.SAMPLE)
+    # fig_s3 = Figure_S3(h5)
+    # fig_s3.show()
+    # fig_s3.save(e + '/fig_s3.pdf')
+    #
+    # h5 = Qimage(d, Figure_S5.SAMPLE)
+    # fig_s5 = Figure_S5(h5, data)
+    # fig_s5.show()
+    # fig_s5.save(e + '/fig_s5.pdf')
+    #
+    # fig_s6 = Figure_S6(data)
+    # fig_s6.show()
+    # fig_s6.save(e + '/fig_s6.pdf')
 
-    fig_4 = Figure_4(clustered)
-    fig_4.show()
-    fig_4.save(e + '/fig_4.pdf')
-
-    chip = ChIP(ch, data.genes())
-    fig_5 = Figure_5(clustered, chip)
-    fig_5.show()
-    fig_5.save(e + '/fig_5.pdf')
-
-    h5 = Qimage(d, Figure_S3.SAMPLE)
-    fig_s3 = Figure_S3(h5)
-    fig_s3.show()
-    fig_s3.save(e + '/fig_s3.pdf')
-
-    h5 = Qimage(d, Figure_S5.SAMPLE)
-    fig_s5 = Figure_S5(h5, data)
-    fig_s5.show()
-    fig_s5.save(e + '/fig_s5.pdf')
-
-    fig_s6 = Figure_S6(data)
-    fig_s6.show()
-    fig_s6.save(e + '/fig_s6.pdf')
+    fig_s7 = Figure_S7(clustered)
+    fig_s7.show()
+    fig_s7.save(e + '/fig_s7.pdf')
