@@ -43,9 +43,9 @@ def mm2inch(*tupl):
         return tuple(i/inch for i in tupl)
 
 
-class Figure_1(Figure):
+class Figure_2(Figure):
     """
-    # Figure 1 - Image segmentation and quantification
+    # Figure 2 - Image segmentation and quantification
     *a*
     """
 
@@ -101,7 +101,7 @@ class Figure_1(Figure):
         self.stats.label(ax, 'h', fontsize=12)
 
 
-class Figure_2(Figure):
+class Figure_3(Figure):
 
     class GeneProfilePlot(LogScaleGenePlot, SmoothProfilePlot, APProfilePlot):
         def format_axis(self):
@@ -218,7 +218,7 @@ class Figure_2(Figure):
         super().plot()
 
 
-class Figure_3(Figure):
+class Figure_4(Figure):
 
     GX_MIN = 0
     GX_MAX = 80
@@ -378,7 +378,7 @@ class Figure_3(Figure):
         super().plot()
 
 
-class Figure_4(Figure):
+class Figure_5(Figure):
 
     class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, SmoothProfilePlot):
         @staticmethod
@@ -616,7 +616,7 @@ class Figure_4(Figure):
         x = np.arange(y.count())
         labels_chip = list(y.index.values)
         barlist = ax.bar(x, y)
-        barlist[10].set_color('C1')
+        barlist[9].set_color('C1')
         ax.set_ylabel('Ato ChIP peak area')
         ax.set_xticks(x)
         ax.set_xticklabels(labels_chip, rotation=45, ha='right')
@@ -653,7 +653,6 @@ class Figure_S3(Figure):
 
     SAMPLE = '1Q8GA8'
     SLICE = 55
-
 
     def __init__(self, image):
         super().__init__(None)
@@ -782,32 +781,111 @@ class Figure_S5(Figure):
         ax.text(-0.15, 1.175, 'j', color='black', transform=ax.transAxes, va='top', fontsize=12)
 
 
+class Figure_S6(Figure):
+
+    class GeneProfilePlot(LogScaleGenePlot, SmoothProfilePlot, APProfilePlot):
+        def format_axis(self):
+            super().format_axis()
+            self.ax.set_ylabel(r'Mean expression')
+            self.ax.set_xlabel(r'A-P position')
+
+        @staticmethod
+        def v_lim():
+            return [0.1, 5]
+
+        @staticmethod
+        def x_lim():
+            return [-10, 40]
+
+        @staticmethod
+        def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5]
+
+    class GeneDiscThumb(LogScaleGenePlot, DiscThumb):
+        @staticmethod
+        def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
+
+        @staticmethod
+        def v_minor_ticks(): return False
+
+    class ExtDiscThumb(LogScaleExtPlot, DiscThumb):
+        @staticmethod
+        def v_ticks(): return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
+
+        @staticmethod
+        def v_minor_ticks(): return False
+
+    def __init__(self, data):
+        super().__init__(data)
+
+    def plot(self):
+        matrices = self.data.matrices()
+        profiles = self.data.profiles()
+        # genes = self.data.genes()
+        genes = ['ato',
+                 'Brd', 'betaTub60D', 'CG2556', 'CG9801', 'E(spl)mdelta-HLH',
+                 'Fas2', 'nvy', 'sca', 'sens', 'seq', 'rau',
+                 'Abl', 'CG13928', 'CG17724', 'CG32150', 'DAAM', 'dila', 'ktub', 'Lrch', 'scrt',
+                 'CG15097', 'dpr9', 'nSyb', 'Victoria',
+                 'dap', 'SRPK',
+                 'CG17378', 'CG31176', 'CG30343', 'phyl', 'spdo',
+                 'beat-IIIc', 'lola-P', 'nmo', 'siz', 'sNPF', 'Vn']
+
+        cols = 2
+        rows = math.ceil(len(genes)/cols)
+        self.fig = plt.figure(figsize=mm2inch(cols * 180, 40 * rows))
+
+        for i, gene in enumerate(genes):
+
+            matrix = matrices.loc[gene]
+            thumbs = [self.GeneDiscThumb(self.fig, matrix['mean'], r'Mean expression'),
+                      self.ExtDiscThumb(self.fig, matrix['ext'], r'Max prominence')]
+            ato_protein = pd.DataFrame()
+            ato_protein['Reporter mean'] = profiles.loc[gene]['mean']
+            ato_protein['Ato (protein) mean'] = profiles.loc['AtoClean']['mean']
+
+            hc = 0.70 / rows
+            wc = 0.25 / cols
+            ht = (1 - (0.45 / rows)) / rows
+            #col = math.floor(i / rows)
+            #row = i - col * rows
+            col = i % 2
+            row = math.floor(i / 2)
+
+            ax = self.ax([0.05 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            thumbs[0].plot(ax)
+            ax = self.ax([0.35 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            thumbs[1].plot(ax)
+            ax = self.ax([0.70 / cols + 0.5 * col, 1 - (row + 1) * ht, wc, hc])
+            self.GeneProfilePlot(self.fig, ato_protein).plot(ax)
+            ax.text(0.975, 0.95, gene, color='black', transform=ax.transAxes, ha='right', va='top', fontsize=10)
+
+
 if __name__ == "__main__":
     plt.rc('font', size=8)
     o_data = OriginalData(f)
     data = DiscData(o_data.cells)
 
-    h5 = Qimage(d, Figure_1.SAMPLE)
-    thumbs = Thumbnails(d + '/thumbs', Figure_1.SAMPLE)
+    h5 = Qimage(d, Figure_2.SAMPLE)
+    thumbs = Thumbnails(d + '/thumbs', Figure_2.SAMPLE)
     stats = CellStats(o_data)
-    fig_1 = Figure_1(stats, h5, thumbs)
-    fig_1.show()
-    fig_1.save(e + '/fig_1.pdf')
-    fig_2 = Figure_2(data)
+    fig_2 = Figure_2(stats, h5, thumbs)
     fig_2.show()
     fig_2.save(e + '/fig_2.pdf')
+    fig_3 = Figure_3(data)
+    fig_3.show()
+    fig_3.save(e + '/fig_3.pdf')
 
     clustering = Clustering(cl, disc_data=data)
     clustered = ClusteredData(clustering)
 
-    fig_3 = Figure_3(clustered)
-    fig_3.show()
-    fig_3.save(e + '/fig_3.pdf')
-
-    chip = ChIP(ch, data.genes())
-    fig_4 = Figure_4(clustered, chip)
+    fig_4 = Figure_4(clustered)
     fig_4.show()
     fig_4.save(e + '/fig_4.pdf')
+
+    chip = ChIP(ch, data.genes())
+    fig_5 = Figure_5(clustered, chip)
+    fig_5.show()
+    fig_5.save(e + '/fig_5.pdf')
 
     h5 = Qimage(d, Figure_S3.SAMPLE)
     fig_s3 = Figure_S3(h5)
@@ -818,3 +896,7 @@ if __name__ == "__main__":
     fig_s5 = Figure_S5(h5, data)
     fig_s5.show()
     fig_s5.save(e + '/fig_s5.pdf')
+
+    fig_s6 = Figure_S6(data)
+    fig_s6.show()
+    fig_s6.save(e + '/fig_s6.pdf')
