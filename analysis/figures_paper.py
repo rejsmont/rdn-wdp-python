@@ -10,7 +10,7 @@ from matplotlib import colors
 from matplotlib.lines import Line2D
 import pandas as pd
 import numpy as np
-from scipy.stats import linregress, zscore
+from scipy.stats import linregress, zscore, sem
 from statsmodels.stats.weightstats import CompareMeans
 from images import Qimage, Thumbnails
 from data import DiscData, OriginalData
@@ -395,7 +395,9 @@ class Figure_5(Figure):
         self.ratios = None
 
     def compute(self):
-        cells = self.data.cells()[self.data.furrow_mask() & ~self.data.bad_gene_mask()]
+        cells = self.data.cells()[self.data.furrow_mask() & self.data.acceptable_mask() & ~self.data.bad_gene_mask()]
+        not_expressed_mask = cells['Gene'].isin(['CG15097', 'dila', 'dpr9', 'ktub', 'nSyb'])
+        cells = cells[~not_expressed_mask]
 
         high_ato = self.data.AGGREGATE_NAMES.inverse['high-ato'][0]
         no_ato = self.data.AGGREGATE_NAMES.inverse['no-ato'][0]
@@ -438,11 +440,12 @@ class Figure_5(Figure):
         cell_ratio_sem = cell_ratio_sem.rename('Expression ratio (SEM)')
 
         peaks = self.chip.peaks().groupby('Gene').agg(['sum', 'count'])
+        peaks = peaks[peaks.index.isin(self.data.genes())]
         ato_p_area = peaks.loc[:, ('p_area', 'sum')].rename('Peak area')
         ato_p_num = peaks.loc[:, ('p_area', 'count')].rename('Peak count')
 
         self.ratios = pd.DataFrame([cell_ratio, cell_ratio_sem, ato_p_area, ato_p_num]).transpose()
-        self.ratios = self.ratios.join(t_stats)
+        self.ratios = self.ratios.join(t_stats, how='outer')
 
     def plot(self):
         if self.ratios is None:
@@ -603,32 +606,41 @@ class Figure_5(Figure):
         ax.plot(x, ry)
         ax.text(0.03, 0.8, 'ρ=' + '{:.2f}'.format(np.corrcoef(x, y)[0, 1]) + ', p=' + '{:.2E}'.format(p_value),
                 fontsize=8, transform=ax.transAxes, color='C1')
-        ax.set_ylim(0.1, 3.5)
+        ax.set_ylim(0.1, 4)
         ax.set_xlabel('Ato ChIP peak area')
         ax.set_ylabel('Expression fold change')
         ax.text(-0.25, 1.1, 'b', color='black', transform=ax.transAxes, va='top', fontsize=12)
 
         # (Ato ChIP peak area)
         ax = self.ax([0.6, 0.40, 0.375, 0.2])
-        ratios = self.ratios.dropna().sort_values('Peak area')
-        y = ratios['Peak area']
-        x = np.arange(y.count())
-        labels_chip = list(y.index.values)
-        barlist = ax.bar(x, y)
-        barlist[9].set_color('C1')
-        ax.set_ylabel('Ato ChIP peak area')
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels_chip, rotation=45, ha='right')
-        ax.text(-0.25, 1.1, 'c', color='black', transform=ax.transAxes, va='top', fontsize=12)
+        ratios = self.ratios[['Peak area', 'Peak count']].dropna().sort_values('Peak area')
+        yc = ratios['Peak area']
+        xc = np.arange(yc.count())
 
-        # (Target expression fold change)
-        ax = self.ax([0.1, 0.12, 0.875, 0.2])
         ratios = self.ratios.sort_values('Expression ratio (mean)')
         y = ratios['Expression ratio (mean)'].dropna()
         e = ratios['Expression ratio (SEM)'].dropna()
         x = np.arange(y.count())
         a = ratios['a'].dropna()
         labels = list(y.index.values)
+
+        labels_chip = list(yc.index.values)
+        barlist = ax.bar(xc, yc)
+        for i, bar in enumerate(barlist):
+            if labels_chip[i] not in labels:
+                bar.set_color('C3')
+            elif labels_chip[i] == 'nvy':
+                bar.set_color('C1')
+        ax.set_ylabel('Ato ChIP peak area')
+        ax.set_xticks([labels_chip.index(i) for i in labels if i in labels_chip])
+        ax.set_xticklabels([l for l in labels if l in labels_chip], {'weight': 'bold'}, rotation=45, ha='right')
+        ax.set_xticks([labels_chip.index(l) for l in labels_chip if l not in labels], minor=True)
+        ax.set_xticklabels([l for l in labels_chip if l not in labels], rotation=45, ha='right', minor=True)
+
+        ax.text(-0.25, 1.1, 'c', color='black', transform=ax.transAxes, va='top', fontsize=12)
+
+        # (Target expression fold change)
+        ax = self.ax([0.1, 0.12, 0.875, 0.2])
         ax.axhline(y=1, color='C3')
         barlist = ax.bar(x, y)
         ax.errorbar(x, y, fmt='none', yerr=e, ecolor='black', capsize=5, elinewidth=0.5, capthick=0.5)
@@ -639,10 +651,10 @@ class Figure_5(Figure):
                 bar.set_color('C2')
             elif labels[i] == 'nvy':
                 bar.set_color('C1')
-        ax.set_ylim(0.1, 3.5)
+        ax.set_ylim(0.1, 4)
         ax.set_ylabel('Expression fold change')
-        ax.set_xticks([labels.index(i) for i in labels_chip])
-        ax.set_xticklabels(labels_chip, {'weight': 'bold'}, rotation=45, ha='right')
+        ax.set_xticks([labels.index(i) for i in labels_chip if i in labels])
+        ax.set_xticklabels([l for l in labels_chip if l in labels], {'weight': 'bold'}, rotation=45, ha='right')
         ax.set_xticks([labels.index(l) for l in labels if l not in labels_chip], minor=True)
         ax.set_xticklabels([l for l in labels if l not in labels_chip], rotation=45, ha='right', minor=True)
         ax.text(-0.107, 1.1, 'd', color='black', transform=ax.transAxes, va='top', fontsize=12)
@@ -869,11 +881,11 @@ class Figure_S7(Figure):
     class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, SmoothProfilePlot):
         @staticmethod
         def v_lim():
-            return [0.1, 10]
+            return [0.1, 50]
 
         @staticmethod
         def v_ticks():
-            return [0.1, 0.2, 0.5, 1, 2, 5, 10]
+            return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
 
     def __init__(self, data):
         super().__init__(data)
@@ -935,6 +947,16 @@ class Figure_S7(Figure):
             end = start + len(data)
             inds = np.arange(start, end)
 
+            cm = CompareMeans.from_data(data[4], data[5])
+            s, p = cm.ztest_ind(usevar='unequal')
+            # print(gene, 'R8 vs post-MF', s, p)
+            cm = CompareMeans.from_data(data[3], data[4])
+            s, p = cm.ztest_ind(usevar='unequal')
+            # print(gene, 'R8 vs MF-high', s, p)
+            cm = CompareMeans.from_data(data[2], data[3])
+            s, p = cm.ztest_ind(usevar='unequal')
+            # print(gene, 'MF-high vs MF-medium', s, p)
+
             values = [bars(v) for v in data]
             d, m, q25, q75, w1, w2 = zip(*values)
             parts = ax.violinplot(d, inds, widths=0.75, showmeans=False, showmedians=False, showextrema=False)
@@ -948,13 +970,46 @@ class Figure_S7(Figure):
             ax.vlines(inds, q25, q75, color='k', linestyle='-', lw=2)
             ax.vlines(inds, w1, w2, color='k', linestyle='-', lw=0.5)
 
+            def stats(a, b):
+
+                if d[a - 1].mean() < 0.2 and d[b - 1].mean() < 0.2:
+                    t = 'nc'
+                else:
+                    cm = CompareMeans.from_data(data[a - 1], data[b - 1])
+                    s, p = cm.ztest_ind(usevar='unequal')
+
+                    if p <= 0.0001 / len(genes) * 3:
+                        t = '***'
+                    elif p <= 0.001 / len(genes) * 3:
+                        t = '***'
+                    elif p <= 0.01 / len(genes) * 3:
+                        t = '**'
+                    elif p <= 0.05 / len(genes) * 3:
+                        t = '*'
+                    else:
+                        t = 'ns'
+
+                y = max([max(d[a - 1]), max(d[b - 1])])
+                ys = y * 1.5
+                ye = y * 1.75
+                yt = y * 2
+                xs = a + 0.05
+                xe = b - 0.05
+
+                ax.vlines([xs, xe], [ys, ys], [ye, ye], color='k', linestyle='-', lw=0.5)
+                ax.hlines(ye, xs, xe, color='k', linestyle='-', lw=0.5)
+                ax.text((a + b) / 2, yt, t, va='bottom', ha='center', fontsize=7)
+
+            stats(3, 4)
+            stats(4, 5)
+            stats(5, 6)
+
             ax.set_xticks([])
             ax.set_yscale('log')
             ax.set_ylim(*self.GeneProfilePlot.v_lim())
             ax.set_yticks(self.GeneProfilePlot.v_ticks())
             labels = [LogScaleGenePlot.major_formatter_log(s, None) for s in self.GeneProfilePlot.v_ticks()]
             labels[0] = '<.1'
-            labels[-1] = '10'
             ax.set_yticklabels(labels)
             ax.set_ylabel('Expression level')
             ax.text(0.5, -0.20, gene, horizontalalignment='center', verticalalignment='center',
@@ -983,14 +1038,13 @@ class Figure_S7(Figure):
         genes = ['ato',
                  'Brd', 'CG2556', 'CG9801', 'E(spl)mdelta-HLH',
                  'Fas2', 'nvy', 'sca', 'sens', 'seq',
-                 'CG13928', 'Lrch', 'rau', 'SRPK',
-                 'CG17724', 'CG32150', 'DAAM', 'scrt', 'CG15097',
-                 'Abl', 'betaTub60D', 'dap',
-                 'dila', 'dpr9', 'ktub', 'nSyb']
+                 'CG13928', 'Lrch', 'SRPK',
+                 'Abl', 'betaTub60D', 'CG17724', 'CG32150', 'DAAM', 'dap', 'rau', 'scrt',
+                  'CG15097', 'dila', 'dpr9', 'ktub', 'nSyb']
 
         cols = 2
         rows = math.ceil(len(genes)/cols)
-        self.fig = plt.figure(figsize=mm2inch(cols * 120, 40 * rows))
+        self.fig = plt.figure(figsize=mm2inch(cols * 120, 50 * rows))
 
         for i, gene in enumerate(genes):
 
