@@ -147,7 +147,7 @@ class ClusteredRNAseq(RNAseq):
         self.img_calib = self._reference[['Abl', 'betaTub60D']]
 
         return None
-        return self.expression_all().groupby(['Cluster_ward', 'cy']).agg([np.mean, self.q99, 'count'])
+        # return self.expression_all().groupby(['Cluster_ward', 'cy']).agg([np.mean, self.q99, 'count'])
 
 
 if __name__ == "__main__":
@@ -173,10 +173,5 @@ if __name__ == "__main__":
     else:
         np.random.seed()
 
-    cells = DiscData(args.cells)
-    clustering = Clustering(args.cells, disc_data=cells)
-    clustered = ClusteredData(clustering.cells)
-    rnas = ClusteredRNAseq(args.scngs, clustered)
-    abl = rnas.histogram('Abl')
-    beta = rnas.histogram('betaTub60D')
-    fas = rnas.histogram('Fas2')
+    rnas = RNAseq(args.scngs)
+

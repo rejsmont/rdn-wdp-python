@@ -571,9 +571,9 @@ class Figure_5(Figure):
         gene_profile(ax, profs)
 
         row = 1
-        dists, profs = gene_data('dap')
+        dists, profs = gene_data('Abl')
         ax = self.ax([0.1, 0.975 - h - row * h * hr, w, h])
-        gene_violin(ax, dists, 'dap')
+        gene_violin(ax, dists, 'Abl')
         ax = self.ax([0.1 + w * wr, 0.975 - h - row * h * hr, w, h])
         gene_profile(ax, profs)
 
