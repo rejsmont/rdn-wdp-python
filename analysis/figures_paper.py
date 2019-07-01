@@ -1039,7 +1039,7 @@ class Figure_S7(Figure):
                  'Brd', 'CG2556', 'CG9801', 'E(spl)mdelta-HLH',
                  'Fas2', 'nvy', 'sca', 'sens', 'seq',
                  'CG13928', 'Lrch', 'SRPK',
-                 'Abl', 'betaTub60D', 'CG17724', 'CG32150', 'DAAM', 'dap', 'rau', 'scrt',
+                 'Abl', 'betaTub60D', 'CG17724', 'CG32150', 'DAAM', 'rau', 'scrt',
                   'CG15097', 'dila', 'dpr9', 'ktub', 'nSyb']
 
         cols = 2
