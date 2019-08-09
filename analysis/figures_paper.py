@@ -660,7 +660,7 @@ class Figure_5(Figure):
         ax.text(-0.107, 1.1, 'd', color='black', transform=ax.transAxes, va='top', fontsize=12)
 
 
-class Figure_S3(Figure):
+class Figure_S2(Figure):
 
     SAMPLE = '1Q8GA8'
     SLICE = 55
@@ -693,7 +693,7 @@ class Figure_S3(Figure):
         self.h5.scalebar(ax, linewidth=3)
         self.h5.label(ax, 'd', fontsize=12, fontweight='bold')
 
-class Figure_S5(Figure):
+class Figure_S4(Figure):
 
     class GeneProfilePlot(LogScaleGenePlot, SmoothProfilePlot, APProfilePlot):
         def format_axis(self):
@@ -792,7 +792,7 @@ class Figure_S5(Figure):
         ax.text(-0.15, 1.175, 'j', color='black', transform=ax.transAxes, va='top', fontsize=12)
 
 
-class Figure_S6(Figure):
+class Figure_S5(Figure):
 
     class GeneProfilePlot(LogScaleGenePlot, SmoothProfilePlot, APProfilePlot):
         def format_axis(self):
@@ -876,7 +876,7 @@ class Figure_S6(Figure):
             ax.text(0.975, 0.95, gene, color='black', transform=ax.transAxes, ha='right', va='top', fontsize=10)
 
 
-class Figure_S7(Figure):
+class Figure_S6(Figure):
 
     class GeneProfilePlot(MultiCellPlot, LogScaleGenePlot, MFProfilePlot, SmoothProfilePlot):
         @staticmethod
@@ -1088,20 +1088,20 @@ if __name__ == "__main__":
     fig_5.show()
     fig_5.save(e + '/fig_5.pdf')
 
-    h5 = Qimage(d, Figure_S3.SAMPLE)
-    fig_s3 = Figure_S3(h5)
-    fig_s3.show()
-    fig_s3.save(e + '/fig_s3.pdf')
+    h5 = Qimage(d, Figure_S2.SAMPLE)
+    fig_s2 = Figure_S2(h5)
+    fig_s2.show()
+    fig_s2.save(e + '/fig_s2.pdf')
 
-    h5 = Qimage(d, Figure_S5.SAMPLE)
-    fig_s5 = Figure_S5(h5, data)
+    h5 = Qimage(d, Figure_S4.SAMPLE)
+    fig_s4 = Figure_S4(h5, data)
+    fig_s4.show()
+    fig_s4.save(e + '/fig_s4.pdf')
+
+    fig_s5 = Figure_S5(data)
     fig_s5.show()
     fig_s5.save(e + '/fig_s5.pdf')
 
-    fig_s6 = Figure_S6(data)
+    fig_s6 = Figure_S6(clustered)
     fig_s6.show()
     fig_s6.save(e + '/fig_s6.pdf')
-
-    fig_s7 = Figure_S7(clustered)
-    fig_s7.show()
-    fig_s7.save(e + '/fig_s7.pdf')
