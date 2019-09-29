@@ -363,7 +363,7 @@ class SampleProcessor:
         thumbnail = self.images[name]
         if "tif" in formats:
             img = Image.fromarray(thumbnail.image, thumbnail.mode)
-            path_tif = os.path.join(self.directory, self.basename + "_thumb_" + name + ".tif")
+            path_tif = os.path.join(self.directory, self.basename.replace("_raw", "") + "_thumb_" + name + ".tif")
             self.logger.debug("Saving %s image to %s", name, path_tif)
             img.save(path_tif)
             img.close()
@@ -371,11 +371,11 @@ class SampleProcessor:
             fig = plt.figure()
             self.plot_thumbnail(thumbnail, fig, 111)
             if "png" in formats:
-                path_png = os.path.join(self.directory, self.basename + "_thumb_" + name + ".png")
+                path_png = os.path.join(self.directory, self.basename.replace("_raw", "") + "_thumb_" + name + ".png")
                 self.logger.debug("Saving %s plot to %s", name, path_png)
                 plt.savefig(path_png)
             if "pdf" in formats:
-                path_pdf = os.path.join(self.directory, self.basename + "_thumb_" + name + ".pdf")
+                path_pdf = os.path.join(self.directory, self.basename.replace("_raw", "") + "_thumb_" + name + ".pdf")
                 self.logger.debug("Saving %s plot to %s", name, path_pdf)
                 plt.savefig(path_pdf)
             plt.close()
@@ -389,11 +389,11 @@ class SampleProcessor:
             fig = plt.figure()
             self.plot_thumbnails(fig)
             if "png" in formats:
-                path_png = os.path.join(self.directory, self.basename + "_thumbs.png")
+                path_png = os.path.join(self.directory, self.basename.replace("_raw", "") + "_thumbs.png")
                 self.logger.debug("Saving thumbnails plot to %s", path_png)
                 plt.savefig(path_png)
             if "pdf" in formats:
-                path_pdf = os.path.join(self.directory, self.basename + "_thumbs.pdf")
+                path_pdf = os.path.join(self.directory, self.basename.replace("_raw", "") + "_thumbs.pdf")
                 self.logger.debug("Saving thumbnails plot to %s", path_pdf)
                 plt.savefig(path_pdf)
             plt.close()
@@ -482,7 +482,7 @@ class SampleProcessor:
                        title="Normalized disc image")
         self.logger.info("Computing neighbors")
         self.compute_neighbors()
-        path_csv = os.path.join(self.directory, self.basename + "_normalized.csv")
+        path_csv = os.path.join(self.directory, self.basename.replace("_raw", "") + ".csv")
         self.logger.debug("Saving normalized dataset to %s", path_csv)
         self.nuclei_p.to_csv(path_csv)
         if self.options.show_thumbs == 'combined':
@@ -490,8 +490,8 @@ class SampleProcessor:
         self.save_thumbnails("tif, png")
         self.logger.info("Processing finished")
 
-    def exception(self):
-        self.logger.error("Error processing sample")
+    def exception(self, s):
+        self.logger.error("Error processing sample %s", s)
 
 
 parser = argparse.ArgumentParser(description='Nuclear point cloud postprocessing.')
@@ -539,14 +539,14 @@ else:
     logger.info("Processing %s with %i workers.", args.dir, args.workers)
 
     samples = [f for f in os.listdir(args.dir) if
-               os.path.isfile(os.path.join(args.dir, f)) and f.endswith(".csv") and not f.endswith("normalized.csv")]
+               os.path.isfile(os.path.join(args.dir, f)) and f.endswith("raw.csv")]
 
     def run_process(sample):
-        proc = SampleProcessor(args.dir, sample, options)
+        proc = SampleProcessor(args.dir, sample, options, furrow=None, flip='auto')
         try:
             proc.run()
-        except:
-            proc.exception()
+        except Exception as e:
+            proc.exception(sample)
 
     if __name__ == '__main__':
         with Pool(args.workers) as p:
