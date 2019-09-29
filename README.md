@@ -9,8 +9,9 @@ for the license and the software description.
 
 ## Data reproduction
 First, download all data from the [data repository](https://github.com/HassanLab/rdn-wdp-data).
-We suggest placing the folders in the `rdn-wdp-data` directory. Warning: he complete datasets
-are quite large (>1TB).
+We suggest placing the folders in the `rdn-wdp-data` directory. Warning: the complete datasets
+are quite large (>1TB). To install all dependencies, please use the provided anaconda
+[environment](environment.yml)
 
 ### Data normalization and registration
 For normalizing the datasets use the [analyse2.py](analysis/analyse2.py) script. Results obtained
