@@ -24,7 +24,7 @@ class Qimage:
                 with open(os.path.join(d, f.replace(".h5", ".yml"))) as yml:
                     self.meta = yaml.load(yml, Loader=yaml.FullLoader)
                     yml.close()
-                self.cells = pd.read_csv(os.path.join(d, f.replace(".h5", ".csv")), index_col=0)
+                self.cells = pd.read_csv(os.path.join(d, f.replace(".h5", "_raw.csv")), index_col=0)
 
     def hierarchy(self):
         self.h5.visit(print)

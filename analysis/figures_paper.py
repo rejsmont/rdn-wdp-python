@@ -393,6 +393,7 @@ class Figure_5(Figure):
         super().__init__(cells)
         self.chip = chip
         self.ratios = None
+        self.statistics = pd.DataFrame()
 
     def compute(self):
         cells = self.data.cells()[self.data.furrow_mask() & self.data.acceptable_mask() & ~self.data.bad_gene_mask()]
@@ -414,6 +415,20 @@ class Figure_5(Figure):
             cm = CompareMeans.from_data(group_cells_high.get_group(group)['Venus'],
                                         group_cells_no.get_group(group)['Venus'])
             s, p = cm.ztest_ind(usevar='unequal')
+            self.statistics = self.statistics.append({
+                "Gene": group,
+                "Test": 'z-test, two-sample, unequal variance',
+                "Sample 1 name": 'high_ato',
+                "Sample 1 n": group_cells_high.get_group(group)['Venus'].count(),
+                "Sample 1 mean": group_cells_high.get_group(group)['Venus'].mean(),
+                "Sample 1 sem": group_cells_high.get_group(group)['Venus'].sem(),
+                "Sample 2 name": 'no_ato',
+                "Sample 2 n": group_cells_no.get_group(group)['Venus'].count(),
+                "Sample 2 mean": group_cells_no.get_group(group)['Venus'].mean(),
+                "Sample 2 sem": group_cells_no.get_group(group)['Venus'].sem(),
+                "Statistic": s,
+                "p-value": p
+            }, ignore_index=True)
 
             # Apply Bonferroni correction to t-test thresholds
             if p <= 0.0001 / len(group_cells_high.groups):
@@ -889,6 +904,7 @@ class Figure_S6(Figure):
 
     def __init__(self, data):
         super().__init__(data)
+        self.statistics = pd.DataFrame()
 
     def plot(self):
 
@@ -949,12 +965,55 @@ class Figure_S6(Figure):
 
             cm = CompareMeans.from_data(data[4], data[5])
             s, p = cm.ztest_ind(usevar='unequal')
+            self.statistics = self.statistics.append({
+                "Gene": gene,
+                "Test": 'z-test, two-sample, unequal variance',
+                "Sample 1 name": 'R8',
+                "Sample 1 n": data[4].count(),
+                "Sample 1 mean": data[4].mean(),
+                "Sample 1 sem": data[4].sem(),
+                "Sample 2 name": 'post-MF',
+                "Sample 2 n": data[5].count(),
+                "Sample 2 mean": data[5].mean(),
+                "Sample 2 sem": data[5].sem(),
+                "Statistic": s,
+                "p-value": p
+            }, ignore_index=True)
+
             # print(gene, 'R8 vs post-MF', s, p)
             cm = CompareMeans.from_data(data[3], data[4])
             s, p = cm.ztest_ind(usevar='unequal')
+            self.statistics = self.statistics.append({
+                "Gene": gene,
+                "Test": 'z-test, two-sample, unequal variance',
+                "Sample 1 name": 'R8',
+                "Sample 1 n": data[4].count(),
+                "Sample 1 mean": data[4].mean(),
+                "Sample 1 sem": data[4].sem(),
+                "Sample 2 name": 'MF-high',
+                "Sample 2 n": data[3].count(),
+                "Sample 2 mean": data[3].mean(),
+                "Sample 2 sem": data[3].sem(),
+                "Statistic": s,
+                "p-value": p
+            }, ignore_index=True)
             # print(gene, 'R8 vs MF-high', s, p)
             cm = CompareMeans.from_data(data[2], data[3])
             s, p = cm.ztest_ind(usevar='unequal')
+            self.statistics = self.statistics.append({
+                "Gene": gene,
+                "Test": 'z-test, two-sample, unequal variance',
+                "Sample 1 name": 'MF-high',
+                "Sample 1 n": data[3].count(),
+                "Sample 1 mean": data[3].mean(),
+                "Sample 1 sem": data[3].sem(),
+                "Sample 2 name": 'MF-medium',
+                "Sample 2 n": data[2].count(),
+                "Sample 2 mean": data[2].mean(),
+                "Sample 2 sem": data[2].sem(),
+                "Statistic": s,
+                "p-value": p
+            }, ignore_index=True)
             # print(gene, 'MF-high vs MF-medium', s, p)
 
             values = [bars(v) for v in data]
