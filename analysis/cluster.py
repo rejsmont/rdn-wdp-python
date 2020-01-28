@@ -44,11 +44,15 @@ if __name__ == "__main__":
     training = None
 
     if args.furrow:
-        masks = Masks(cells)
-        training = cells[masks.cells_mf_area]
+        if training is None:
+            training = cells
+        masks = Masks(training)
+        training = training[masks.cells_mf_area]
     if args.no_bad:
-        masks = Masks(cells)
-        training = cells[~ masks.samples_bad_segm]
+        if training is None:
+            training = cells
+        masks = Masks(training)
+        training = training[~ masks.samples_bad_segm]
 
     config = ClusteringConfig(args.clusters, args.samples, args.repeats, cutoff=args.cutoff,
                               method=args.method, metric=args.metric,
