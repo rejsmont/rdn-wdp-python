@@ -143,7 +143,7 @@ class Masks:
     def _mask_min_max_getter(self, p, m: MinMax):
         v = getattr(self, p)
         if v is None:
-            v = self._cells[m.column] >= m.min & self._cells[m.column] <= m.max
+            v = (self._cells[m.column] >= m.min) & (self._cells[m.column] <= m.max)
             setattr(self, p, v)
         return v
 
