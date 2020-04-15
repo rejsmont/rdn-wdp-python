@@ -9,9 +9,17 @@ import yaml
 
 
 class DiscData:
-
     FURROW_MIN = -8.0
     FURROW_MAX = 8.0
+    BAD_GENES = ['beat-IIIc', 'CG17378', 'CG31176', 'dap', 'lola-P', 'nmo',
+                 'CG30343', 'phyl', 'siz', 'sNPF', 'spdo', 'Vn']
+    BAD_SAMPLES = ['J0RYWJ', '3SKX4V', '7AMINR', '4EAAEF', 'VH2DCR', 'WJ8F8M', 'ZNVOPe', 'APKoAe', 'zfroDh',
+                   'lgxpL6', 'pcTNzE', '80IkVQ', 'UQZJ3K']
+
+    NO_SIGNAL = ['beat-IIIc', 'CG17378', 'CG31176', 'lola-P', 'nmo', 'CG30343', 'phyl', 'siz', 'sNPF', 'spdo', 'Vn']
+    DAMAGED = ['beat-IIIc', 'lola-P', 'nmo', 'siz', 'sNPF', 'Vn']
+    SHOULD = ['spdo', 'phyl']
+
     SYNONYMS = {'CG1625': 'dila', 'CG6860': 'Lrch', 'CG8965': 'rau', 'HLHmdelta': 'E(spl)mdelta-HLH',
                 'king-tubby': 'ktub', 'n-syb': 'nSyb'}
 

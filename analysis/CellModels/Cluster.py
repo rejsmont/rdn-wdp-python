@@ -166,8 +166,6 @@ class Clustering:
         cells = self._training[mask]
         x = stats.zscore(cells[c.hc_features].values, axis=0)
         i = cells.index.values
-        # z = linkage(x, c.method)
-        # fc = fcluster(z, c.clusters, criterion='maxclust')
         cluster = AgglomerativeClustering(n_clusters=c.clusters, affinity=c.metric, linkage=c.method)
         cluster.fit_predict(x)
         fc = cluster.labels_ + 1
@@ -349,13 +347,3 @@ class AtoClustering(Clustering):
         r.cells.loc[r.cells['cy'] < Morphology.FURROW_BROAD.min, ['Cluster_' + c.method]] = pre_mf
 
 
-    # def compute(self):
-    #     find_centroids(self.method)
-    #     self.centroids['Cluster'] = 0
-    #     self.centroids['Distance'] = 0.0
-    #     cluster_centroids(self.method)
-    #     self.clusters = self.clusters.join(self.centroids['Cluster'], on=['SampleSet', 'Method', 'LocalCluster'])
-    #     random_forest(self.method, cutoff=self.cutoff)
-    #     name_clusters()
-    #     classify_remaining()
-    #     self._logger.info('Cell classification done')

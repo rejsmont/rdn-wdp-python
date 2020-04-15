@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from CellModels.Clustering import ClusteringConfig, Clustering
+from CellModels.Cluster import ClusteringConfig, Clustering
 from CellModels.Filters import Masks
 from CellModels.IO import CellReader, ClusteringResultsWriter
 

@@ -479,6 +479,30 @@ class bidict(dict):
         super(bidict, self).__delitem__(key)
 
 
+class QCData:
+
+    bad = [
+            'hVJG7F', 't4JOuq', 'ylcNLd', '1NP0AI', '7SNHJY', 'BQ5PR8', 'DWYW27', 'I9BTQL', 'A5UIWC', 'KWGZHQ',
+            'M6GF25', 'IJ5NUJ', 'WSSIG8', '3JR9EY', 'F7ZYLW', 'HDJ4XA', 'K2TCAP', 'OS7ENG', 'XC0ZUP', '61C1JS',
+            '7RF4GF', 'AT7VB2', 'CF4H1M', 'M946YU', 'S9PW43', '1BBD7G', '88Q70R', 'FC3922', 'QVBXHU', 'X88DWV',
+            '05U0AU', '3LS10Z', 'CD2J9U', 'BWLDNN', 'K0LKCY', 'KI9HFA', 'QTP049', 'SBD6VF', 'UUQTVA', 'ZL7PFF',
+            'CZXV1N', '2SZXIH', '4V7B84', '5VUZUB', 'DGSCYR', 'FDMJRR', 'I0DO4Q', 'TAMCRX', '3SKX4V', '7AMINR',
+            '80IkVQ', 'APKoAe', 'J0RYWJ', 'lgxpL6', 'VH2DCR', 'zfroDh', 'ZNVOPe', '8CGDYO', '0F8P68', 'SD5LUQ',
+            'SN53VN', 'LVMMH9', 'LGNZBA', '1KAZBK', '8E3JMX', '9MCg4f', 'EXQ2NE', 'PrPFDy', 'PVVBJS', 'Sd8PAv',
+            'T8USJQ', 'tXGki9', 'EMGTEW', 'JN0V15', 'PRCAE4', 'ergOuv', 'Ftc2VC', 'iBP4Fr', 'qqvRoI', 'V0qhzb',
+            '1BLYXM', 'CX8CT6', '8XHGAV', 'LMeg2F', 'R6F3J5',
+    ]
+    marginal = [
+            'TY2COS', 'YZDFTH', 'NSOK5I', 'RVOX2M', 'D0CTSD', 'H7WOUU', 'RWPK00', '4SDPFB', 'H9OS9A', 'IU43O6',
+            'OHXME8', 'TYEOK6', 'VDOERX', 'hsZ6pl', 'R4JB64', 'RKNAC2', '64EQVJ', 'lCUF2l', 'HG24ZO', 'TWP10V',
+            '3QOEXZ', '8HTKXA', 'ORR8VN', '5IEVIW', 'ETUQB6', 'VK3DU4', 'PV2RPF', 'QLOP4L', 'W4CQNL', 'Y7UX2N',
+            'Z2JP1B', '4FYXUO', 'HJ4QFN', 'JP0OGS', '3ALXQE', 'FIQKAB', 'SZ3DCM', 'XRQVVZ', '4CNFTO', '6PC2MI',
+            'JLCD5B', '249YNC', '5PL9UP', 'AVTGN7', 'QJ2QGS', '05O5MD', 'S2QZ2B', '9899TQ', '0obMbL', 'KJB859',
+            'OUJ0DB', '1KDDWQ', '502MKQ', '0687TE', '9473S9', 'VOK2S9', 'J55205', '0NDb1T', '2441VU', 'HCABGW',
+            'OFTUDJ', 'S5CO9J', 'VD2V13',
+    ]
+
+
 class ClusteredData(DiscData, QCData):
 
     CLUSTER_NAMES = bidict({1: 'R8', 2: 'MF-high', 3: 'MF', 4: 'post-MF', 5: 'pre-MF', 6: 'MF-ato'})
