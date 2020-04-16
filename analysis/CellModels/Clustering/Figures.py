@@ -299,8 +299,11 @@ class GeneClusteringPlot(Figure):
             lp_ax.text(0.025, 0.05, str(sample),
                        transform=lp_ax.transAxes, ha='left', size='xx-large')
             r.append(lp_ax)
-            dn = Dendrogram(self._data, sample, self._features, cells)
-            r.append(dn.plot_axes(self._fig.add_subplot(gs[i + 1, 1])))
+            try:
+                dn = Dendrogram(self._data, sample, self._features, cells)
+                r.append(dn.plot_axes(self._fig.add_subplot(gs[i + 1, 1])))
+            except KeyError:
+                continue
 
         ax = self._fig.add_subplot(gs[-1, 0])
         ax.set_axis_off()

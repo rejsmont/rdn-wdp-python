@@ -174,9 +174,13 @@ class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
         samples = self._cells.index.unique('Sample')
         for sample in samples:
             idx = pd.IndexSlice
-            ds = self.linkage(self._cells.loc[idx[:, sample], :],
-                              self._config.rf_features)[:, 2]
-            distances.append(np.sum(np.abs(d - ds)))
+            try:
+                ds = self.linkage(self._cells.loc[idx[:, sample], :],
+                                  self._config.rf_features)[:, 2]
+            except KeyError:
+                continue
+            if d.shape == ds.shape:
+                distances.append(np.sum(np.abs(d - ds)))
         return samples[distances.index(min(distances))]
 
     def best_clustering(self):
