@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.cluster import hierarchy
 from scipy.spatial import distance
 
 
@@ -65,27 +66,27 @@ class MultiClusteringTools(ClusteringTools):
 
     @classmethod
     def linkage(cls, df, features, rename=True):
-
         t = cls._cluster_table(df)
         columns = list(reversed(t.columns))
-        centroids = []
-        linkage = []
+        centroids, linkage = [], []
         last = 0
-        lookup = {}
-        counts = {}
-        dists = {}
+        lookup, counts, dists = {}, {}, {}
 
         def update(rc, ix, la):
-            if len(rc) == 2:
-                a = lookup[rc[0]]
-                b = lookup[rc[1]]
-                dist = distance.euclidean(
-                    centroids[ix].loc[rc[0], features],
-                    centroids[ix].loc[rc[1], features]) + dists[a] + dists[b]
+            if len(rc) <= 1:
+                return la
+            cen = centroids[ix].loc[rc, features].values
+            l_lookup = dict(zip(range(len(cen)), rc))
+            l_last = len(cen) - 1
+            for oa, ob, dist, n in hierarchy.linkage(cen):
+                a, b = lookup[l_lookup[oa]], lookup[l_lookup[ob]]
+                dist += dists[a] + dists[b]
                 count = counts[a] + counts[b]
                 linkage.append([a - 1, b - 1, dist, count])
-                la = la + 1 if rename else rc[0]
-                lookup[rc[0]] = la
+                l_last = l_last + 1
+                l_lookup[l_last] = rc[int(oa)]
+                la = la + 1 if rename else min(l_lookup[oa], l_lookup[ob])
+                lookup[l_lookup[oa]] = lookup[l_lookup[ob]] = la
                 counts[la] = count
                 dists[la] = dist
             return la
@@ -99,12 +100,12 @@ class MultiClusteringTools(ClusteringTools):
                 for m in sup:
                     sub = d.loc[d[columns[i]] == m, columns[i - 1]].unique()
                     last = update(sub, i - 1, last)
-                last = update(sup, i, last)
+                if len(sup) == 2:
+                    last = update(sup, i, last)
             else:
                 last = d.loc[:, columns[i]].max()
                 v = d.values.flatten()
                 lookup = dict(zip(v, v))
                 counts = dict(zip(v, [1 for _ in range(len(v))]))
                 dists = dict(zip(v, [0 for _ in range(len(v))]))
-
         return np.array(linkage)
