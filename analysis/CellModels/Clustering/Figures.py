@@ -161,13 +161,11 @@ class Dendrogram(Figure):
 
         for i, z in enumerate(self._linkage):
             r = i + self._linkage.shape[0] + 1
-            j = int(z[0])
-            if j in lookup.keys():
-                lookup[r] = lookup[j]
-            else:
-                lookup[r] = 'C' + str(int(z[0]))
+            j = lookup[z[0]] if z[0] in lookup.keys() else z[0]
+            k = lookup[z[1]] if z[1] in lookup.keys() else z[1]
+            lookup[r] = min(j, k)
             if i < self._linkage.shape[0] - 1:
-                c_dict[z[2]] = lookup[r]
+                c_dict[z[2]] = 'C' + str(int(lookup[r]))
             else:
                 c_dict[z[2]] = 'k'
 
