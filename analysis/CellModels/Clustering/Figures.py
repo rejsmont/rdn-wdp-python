@@ -149,23 +149,24 @@ class Dendrogram(Figure):
             else:
                 idx = pd.IndexSlice
                 cells = self._data.cells.loc[idx[:, sample], :]
-        self._linkage = self._data.linkage(cells, features)
+        self._linkage, self._names = self._data.linkage(cells, features, names=True)
 
     def plot_axes(self, ax=None):
         if ax is None:
             ax = self._get_ax(rect=[0, 0, 1, 1])
-        dn = dendrogram(self._linkage, ax=ax, leaf_label_func=lambda l: str(int(l) + 1),
+        dn = dendrogram(self._linkage, ax=ax, leaf_label_func=lambda l: str(int(self._names[l])),
                         leaf_font_size=ax.xaxis.get_label().get_fontsize())
-        lookup = {}
-        c_dict = {}
 
+        c_dict = dict(zip(self._names.keys(), ['C' + str(int(f)) for f in self._names.values()]))
+
+        c_dict = {}
         for i, z in enumerate(self._linkage):
             r = i + self._linkage.shape[0] + 1
-            j = lookup[z[0]] if z[0] in lookup.keys() else z[0]
-            k = lookup[z[1]] if z[1] in lookup.keys() else z[1]
-            lookup[r] = min(j, k)
+            # j = lookup[z[0]] if z[0] in lookup.keys() else z[0]
+            # k = lookup[z[1]] if z[1] in lookup.keys() else z[1]
+            # lookup[r] = min(j, k)
             if i < self._linkage.shape[0] - 1:
-                c_dict[z[2]] = 'C' + str(int(lookup[r]))
+                c_dict[z[2]] = 'C' + str(int(self._names[r]) - 1)
             else:
                 c_dict[z[2]] = 'k'
 
@@ -175,7 +176,7 @@ class Dendrogram(Figure):
             ax.plot(x, y, 'o', c=c_dict[y], markersize=10)
 
         for i, x in zip(dn['leaves'], ax.get_xticks()):
-            ax.plot(x, 0, 'o', c='C' + str(i), markersize=10)
+            ax.plot(x, 0, 'o', c='C' + str(int(self._names[i] - 1)), markersize=10)
 
         ax.set_ylabel('Distance')
         ax.set_xlabel('Cluster')

@@ -75,12 +75,12 @@ class MultiClusteringTools(ClusteringTools):
         return nf.drop(columns=cls._cluster_columns(nf)).rename(columns={h_column[0]: column[0]})
 
     @classmethod
-    def linkage(cls, df, features, rename=True):
+    def linkage(cls, df, features, rename=True, names=False):
         t = cls._cluster_table(df)
         columns = list(reversed(t.columns))
         centroids, linkage = [], []
         last = 0
-        lookup, counts, dists = {}, {}, {}
+        n_dict, lookup, counts, dists = {}, {}, {}, {}
 
         def update(rc, ix, la):
             if len(rc) <= 1:
@@ -95,8 +95,9 @@ class MultiClusteringTools(ClusteringTools):
                 linkage.append([a - 1, b - 1, dist, count])
                 l_last = l_last + 1
                 l_lookup[l_last] = rc[int(oa)]
-                la = la + 1 if rename else min(l_lookup[oa], l_lookup[ob])
+                la = la + 1
                 lookup[l_lookup[oa]] = lookup[l_lookup[ob]] = la
+                n_dict[la - 1] = min(l_lookup[oa], l_lookup[ob])
                 counts[la] = count
                 dists[la] = dist
             return la
@@ -116,6 +117,28 @@ class MultiClusteringTools(ClusteringTools):
                 last = d.loc[:, columns[i]].max()
                 v = d.values.flatten()
                 lookup = dict(zip(v, v))
+                n_dict = dict(zip(v - 1, v))
                 counts = dict(zip(v, [1 for _ in range(len(v))]))
                 dists = dict(zip(v, [0 for _ in range(len(v))]))
-        return np.array(linkage)
+
+        linkage = np.array(linkage)
+
+        m_val = np.max(t.values) - 1
+        if linkage.shape[0] < m_val:
+            n_val = n_dict.values()
+            n_keys = np.array(list(n_dict.keys()))
+            for i in np.setdiff1d(np.arange(m_val), linkage[:, 0:2]):
+                linkage[linkage > i] -= 1
+                n_keys[n_keys > i] -= 1
+            n_dict = dict(zip(n_keys, n_val))
+
+        if not rename:
+            c0 = [n_dict[v] for v in linkage[:, 0]]
+            c1 = [n_dict[v] for v in linkage[:, 1]]
+            linkage[:, 0] = c0
+            linkage[:, 1] = c1
+
+        if names:
+            return linkage, n_dict
+        else:
+            return linkage
