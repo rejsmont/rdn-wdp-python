@@ -14,13 +14,28 @@ class ClusteringReader(CellColumns):
         if p.endswith(".yml"):
             yml_path = p
             csv_path = p.replace(".yml", ".csv")
+            h5_path = p.replace(".yml", ".h5")
         elif p.endswith(".csv"):
             yml_path = p.replace(".csv", ".yml")
             csv_path = p
+            h5_path = None
+        elif p.endswith(".h5"):
+            h5_path = p
+            yml_path = p.replace(".h5", ".yml")
+            csv_path = None
         else:
-            raise ValueError("Input path must be a CSV or YAML file")
+            raise ValueError("Input path must be a HDF5, CSV or YAML file")
 
-        cells = CellReader.read(csv_path)
+        if csv_path:
+            try:
+                cells = CellReader.read(csv_path)
+            except:
+                pass
+        if h5_path:
+            try:
+                cells = CellReader.read_hdf(csv_path)
+            except:
+                pass
 
         with open(yml_path) as yml_file:
             metadata = yaml.load(yml_file, Loader=yaml.FullLoader)

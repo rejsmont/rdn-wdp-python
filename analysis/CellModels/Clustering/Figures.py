@@ -15,8 +15,8 @@ class ClusterPlot(DiscPlot, LogScaleExtPlot):
             self._column = self._data.get_cluster_columns()[0]
         else:
             self._column = column
-        sort = self._cells.groupby(self._column)[[self._column]].transform(len).sort_values(self._column,
-                                                                                            ascending=False).index
+        sort = self._cells.groupby(self._column)[[self._column]] \
+                          .transform(len).sort_values(self._column, ascending=False).index
         self._cells = self._cells.loc[sort]
 
     def _get_c(self):

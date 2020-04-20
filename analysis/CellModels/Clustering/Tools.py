@@ -12,8 +12,18 @@ class ClusteringTools:
 
     @classmethod
     def _cluster_table(cls, df, column='Cluster'):
-        columns = cls._cluster_columns(df, column)
-        return df.groupby(columns, as_index=False).max()[columns]
+        c = cls._cluster_columns(df, column)
+        t = df.groupby(c, as_index=False).max()[c]
+        if len(t.index) != t.iloc[:, -1].max():
+            for i in range(len(c) - 1):
+                cur = c[i]
+                nxt = c[i + 1]
+                u = t[t[cur] != t[nxt]]
+                n = t.groupby(cur).size()
+                f = (n.index.isin(u[cur])) & (n == 1)
+                for v in n[f].index:
+                    t.loc[t[cur] == v, nxt] = v
+        return t
 
     def get_cluster_columns(self, cells=None):
         if cells is None:
