@@ -1,10 +1,23 @@
 import logging
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import pandas as pd
 from matplotlib import colors
 
 from CellModels.Clustering.Data import ClusteringResult
+
+
+class MultiFigurePdf:
+
+    def __init__(self, figures):
+        self._figures = figures
+
+    def save(self, path):
+        with PdfPages(path) as pdf:
+            for f in self._figures:
+                pdf.savefig(f.fig)
+                f.close()
 
 
 class Figure:
@@ -43,12 +56,23 @@ class Figure:
     def name(self):
         return self.__class__.__name__
 
+    def close(self):
+        if self._plotted:
+            plt.close(self._fig)
+            self._plotted = False
+
     def _get_ax(self, *args, **kwargs):
         ax = self._fig.add_axes(plt.Axes(self._fig, *args, **kwargs))
         return ax
 
     def _size(self):
         return None
+
+    @property
+    def fig(self):
+        if not self._plotted:
+            self.plot()
+        return self._fig
 
 
 class LogScaleGenePlot:
