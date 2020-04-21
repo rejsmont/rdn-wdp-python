@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from matplotlib import colors
 from matplotlib.lines import Line2D
@@ -118,7 +119,8 @@ class CentroidPlot(DiscPlot, LogScaleExtPlot):
 
         if column is None:
             centroids = self._cells[self._features].mean()
-            x = [centroids[find_field('Measurements', 'Normalized')]]
+            x = np.array([centroids[find_field('Measurements', 'Normalized')]])
+            x[x < self.v_lim()[0]] = self.v_lim()[0]
             y = [centroids[find_field('Position', 'y')]]
             c = 'k'
             k = [centroids[find_field('Measurements', 'Prominence')]]
@@ -126,7 +128,8 @@ class CentroidPlot(DiscPlot, LogScaleExtPlot):
         else:
             centroids = self._cells.groupby(column)[self._features].mean().sort_values(by=column).assign(
                 Count=self._cells.groupby(column)[self._features].size())
-            x = centroids[find_field('Measurements', 'Normalized')]
+            x = np.array(centroids[find_field('Measurements', 'Normalized')])
+            x[x < self.v_lim()[0]] = self.v_lim()[0]
             y = centroids[find_field('Position', 'y')]
             c = (centroids.index - 1) / 10
             k = centroids[find_field('Measurements', 'Prominence')]

@@ -127,9 +127,9 @@ class MultiClusteringTools(ClusteringTools):
         if linkage.shape[0] < m_val:
             n_val = n_dict.values()
             n_keys = np.array(list(n_dict.keys()))
-            for i in np.setdiff1d(np.arange(m_val), linkage[:, 0:2]):
-                linkage[linkage > i] -= 1
-                n_keys[n_keys > i] -= 1
+            for c, i in enumerate(np.setdiff1d(np.arange(m_val), linkage[:, 0:2])):
+                linkage[linkage > (i - c)] -= 1
+                n_keys[n_keys > (i - c)] -= 1
             n_dict = dict(zip(n_keys, n_val))
 
         if not rename:

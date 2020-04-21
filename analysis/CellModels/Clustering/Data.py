@@ -158,6 +158,8 @@ class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
             self._config = results._config
         elif isinstance(results, list):
             super().__init__(results)
+        else:
+            raise ValueError("Results must be a list or an instance of MultiClusteringResult")
         harmonized = self._harmonize(self._cells, self._config.rf_features)
         self._clusters_t = self._cluster_table(self._cells).join(self._cluster_table(harmonized),
                                                                  rsuffix=' harmonized').rename(
@@ -186,7 +188,8 @@ class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
     def best_clustering(self):
         lk = self.get_linkage(rename=False)
         cutoff = np.mean(lk[:, 2])
-        c = np.max(lk[lk[:, 2] > cutoff, 0:2] + 1)
+        c = np.max(lk[lk[:, 2] > cutoff, 0:2])
+        print(cutoff, c)
         for column in self._cluster_columns(self._cells):
             if c in self._cells[column].values:
                 return column, cutoff
