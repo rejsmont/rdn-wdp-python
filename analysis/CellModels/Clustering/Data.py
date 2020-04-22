@@ -199,7 +199,6 @@ class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
         lk = self.get_linkage(rename=False)
         cutoff = np.mean(lk[:, 2])
         c = np.max(lk[lk[:, 2] > cutoff, 0:2])
-        print(cutoff, c)
         for column in self._cluster_columns(self._cells):
             if c in self._cells[column].values:
                 return column, cutoff
