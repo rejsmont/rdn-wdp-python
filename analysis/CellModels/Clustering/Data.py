@@ -190,10 +190,10 @@ class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
                 d_mask = (dc[:, None] == dsc).all(-1).any(-1)
                 ds_mask = (dsc[:, None] == dc).all(-1).any(-1)
                 distance = np.sum(np.abs(d[d_mask, 2] - ds[ds_mask, 2])) \
-                    + np.sum(d[~d_mask, 2]) + np.sum(ds[~ds_mask, 2])
+                    + np.sum(np.square(d[~d_mask, 2])) + np.sum(np.square(ds[~ds_mask, 2]))
                 distances.append(distance)
 
-            return samples[distances.index(np.nanmin(distances))]
+        return samples[distances.index(np.nanmin(distances))]
 
     def best_clustering(self):
         lk = self.get_linkage(rename=False)
