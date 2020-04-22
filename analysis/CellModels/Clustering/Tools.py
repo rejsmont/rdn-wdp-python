@@ -90,6 +90,8 @@ class MultiClusteringTools(ClusteringTools):
             l_last = len(cen) - 1
             for oa, ob, dist, n in hierarchy.linkage(cen):
                 a, b = lookup[l_lookup[oa]], lookup[l_lookup[ob]]
+                if a == b:
+                    continue
                 dist += dists[a] + dists[b]
                 count = counts[a] + counts[b]
                 linkage.append([a - 1, b - 1, dist, count])
@@ -128,7 +130,9 @@ class MultiClusteringTools(ClusteringTools):
             n_val = n_dict.values()
             n_keys = np.array(list(n_dict.keys()))
             for c, i in enumerate(np.setdiff1d(np.arange(m_val), linkage[:, 0:2])):
-                linkage[linkage > (i - c)] -= 1
+                lc = linkage[:, 0:2]
+                lc[lc > (i - c)] -= 1
+                linkage[:, 0:2] = lc
                 n_keys[n_keys > (i - c)] -= 1
             n_dict = dict(zip(n_keys, n_val))
 
