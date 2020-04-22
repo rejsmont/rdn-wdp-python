@@ -166,24 +166,34 @@ class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
             columns={'Cluster harmonized': 'Harmonized cluster'})
         self._cells = harmonized
 
-    def get_linkage(self, features=None, rename=True):
+    def get_linkage(self, features=None, rename=True, names=False):
         features = self._config.rf_features if features is None else features
-        return self.linkage(self._cells, features, rename)
+        return self.linkage(self._cells, features, rename, names)
 
     def representative_sample(self):
-        d = self.get_linkage()[:, 2]
+        d = self.get_linkage()
+        dc = d[:, 2]
         distances = []
         samples = self._cells.index.unique('Sample')
         for sample in samples:
             idx = pd.IndexSlice
             try:
                 ds = self.linkage(self._cells.loc[idx[:, sample], :],
-                                  self._config.rf_features)[:, 2]
+                                  self._config.rf_features)
             except KeyError:
+                distances.append(np.nan)
                 continue
+            dsc = ds[:, 2]
             if d.shape == ds.shape:
-                distances.append(np.sum(np.abs(d - ds)))
-        return samples[distances.index(min(distances))]
+                distances.append(np.sum(np.abs(dc - dsc)))
+            else:
+                d_mask = (dc[:, None] == dsc).all(-1).any(-1)
+                ds_mask = (dsc[:, None] == dc).all(-1).any(-1)
+                distance = np.sum(np.abs(d[d_mask, 2] - ds[ds_mask, 2])) \
+                    + np.sum(d[~d_mask, 2]) + np.sum(ds[~ds_mask, 2])
+                distances.append(distance)
+
+            return samples[distances.index(np.nanmin(distances))]
 
     def best_clustering(self):
         lk = self.get_linkage(rename=False)
