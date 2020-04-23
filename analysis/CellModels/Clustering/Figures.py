@@ -92,17 +92,17 @@ class CentroidPlot(DiscPlot, LogScaleExtPlot):
                           ticks=self.v_ticks(), format=self.major_formatter_log)
         cb.set_label(label=str(self._field[-1]) + ' prominence')
 
-    def plot_legend(self, ax, full=True, loc='center'):
+    def plot_legend(self, ax, full=True, loc='center', ncol=None):
         handles = []
         if full:
             n = int(max(self._cells[self._columns[self._index]].unique()))
             for i in range(n):
                 handles.append(Line2D([0], [0], marker='o', color='C' + str(i), markersize=10, lw=0))
             labels = [('Cluster ' + str(i + 1)) for i in range(n)]
-            ncol = 3
+            ncol = ncol if ncol is not None else 3
         else:
             labels = []
-            ncol = 2
+            ncol = ncol if ncol is not None else 2
         handles.append(Line2D([0], [0], marker='o', color='k', markersize=10, lw=0))
         handles.append(Line2D([0], [0], marker='o', color='k', markersize=10, lw=0, alpha=0.2))
         handles.append(Line2D([0], [0], marker='o', color='y', markersize=5, lw=0))
@@ -279,47 +279,55 @@ class GeneClusteringPlot(Figure):
         if ax is not None:
             raise ValueError("Cannot specify axis for plot with subplots")
         r = []
-        gs = self._fig.add_gridspec(len(self._samples) + 2, 2)
+        gs = self._fig.add_gridspec(len(self._samples) + 2, 3)
         cp = CentroidPlot(self._data, None, self._best_clustering,
                           self._features, self._cells, False)
-        cp_ax = cp.plot_axes(self._fig.add_subplot(gs[0, 0]))
+        cp_ax = cp.plot_axes(self._fig.add_subplot(gs[0, 1]))
         cp_ax.text(0.975, 0.915, "k = " + str(self._best_clustering[2]),
                    transform=cp_ax.transAxes, ha='right', size='large')
         r.append(cp_ax)
 
         dn = Dendrogram(self._data, None, self._features, self._cells)
-        dn_ax = dn.plot_axes(self._fig.add_subplot(gs[0, 1]))
+        dn_ax = dn.plot_axes(self._fig.add_subplot(gs[0, 2]))
         dn_ax.hlines(self._m_dist, *dn_ax.get_xlim(), ls='dotted', alpha=0.5)
         r.append(dn_ax)
 
-        lp = None
+        lp = sp = None
         for i, sample in enumerate(self._samples):
             idx = pd.IndexSlice
             cells = self._data.cells.loc[idx[:, sample], :]
+            sp = SamplePlot(self._data, sample, self._field, cells)
+            sp_ax = sp.plot_axes(self._fig.add_subplot(gs[i + 1, 0]))
+            sp_ax.text(0.025, 0.05, str(sample),
+                       transform=sp_ax.transAxes, ha='left', size='xx-large')
+            r.append(sp_ax)
             lp = ClusterPlot(self._data, sample, self._best_clustering, cells)
-            lp_ax = lp.plot_axes(self._fig.add_subplot(gs[i + 1, 0]))
-            lp_ax.text(0.025, 0.05, str(sample),
-                       transform=lp_ax.transAxes, ha='left', size='xx-large')
+            lp_ax = lp.plot_axes(self._fig.add_subplot(gs[i + 1, 1]))
             r.append(lp_ax)
             try:
                 dn = Dendrogram(self._data, sample, self._features, cells)
-                r.append(dn.plot_axes(self._fig.add_subplot(gs[i + 1, 1])))
+                r.append(dn.plot_axes(self._fig.add_subplot(gs[i + 1, 2])))
             except KeyError:
                 continue
 
         ax = self._fig.add_subplot(gs[-1, 0])
         ax.set_axis_off()
         cax = inset_axes(ax, width="100%", height="10%", loc='upper left')
-        cp.plot_colorbar(cax, 'horizontal', self._fig)
-        lp.plot_legend(ax)
+        sp.plot_colorbar(cax, 'horizontal', self._fig)
         r.append(ax)
 
         ax = self._fig.add_subplot(gs[-1, 1])
         ax.set_axis_off()
-        cp.plot_legend(ax, full=False)
+        cax = inset_axes(ax, width="100%", height="10%", loc='upper left')
+        cp.plot_colorbar(cax, 'horizontal', self._fig)
+        r.append(ax)
+
+        ax = self._fig.add_subplot(gs[-1, 2])
+        ax.set_axis_off()
 
         ax = self._fig.add_subplot(gs[-1, 0:])
         ax.set_axis_off()
+        cp.plot_legend(ax, full=True, ncol=6)
         cax = inset_axes(ax, width="100%", height="15%", loc='lower left')
         text = 'Single-gene clustering plots: ' + str(self._cells.index.unique(0)[0])
         cax.text(0.5, 1, text, size='xx-large', ha='center')
@@ -329,4 +337,4 @@ class GeneClusteringPlot(Figure):
         return r
 
     def _size(self):
-        return 15, 5 * (len(self._samples) + 2)
+        return 15, 3.33 * (len(self._samples) + 2)
