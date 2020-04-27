@@ -82,6 +82,8 @@ class CentroidPlot(DiscPlot, LogScaleExtPlot):
         ax.set_xscale(self.v_scale())
         ax.set_xticks(self.v_ticks())
         ax.set_xticklabels(self.v_ticks())
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
         self._ax = ax
         return ax
 
@@ -159,15 +161,12 @@ class Dendrogram(Figure):
             ax = self._get_ax(rect=[0, 0, 1, 1])
         dn = dendrogram(self._linkage, ax=ax, leaf_label_func=lambda l: str(int(self._names[l])),
                         leaf_font_size=ax.xaxis.get_label().get_fontsize())
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
 
         c_dict = dict(zip(self._names.keys(), ['C' + str(int(f)) for f in self._names.values()]))
-
-        c_dict = {}
         for i, z in enumerate(self._linkage):
             r = i + self._linkage.shape[0] + 1
-            # j = lookup[z[0]] if z[0] in lookup.keys() else z[0]
-            # k = lookup[z[1]] if z[1] in lookup.keys() else z[1]
-            # lookup[r] = min(j, k)
             if i < self._linkage.shape[0] - 1:
                 c_dict[z[2]] = 'C' + str(int(self._names[r]) - 1)
             else:

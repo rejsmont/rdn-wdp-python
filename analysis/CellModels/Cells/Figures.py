@@ -141,6 +141,8 @@ class DiscPlot(Figure):
         ax.set_ylim(self.GY_MAX, self.GY_MIN)
         ax.set_ylabel('A-P position')
         ax.set_xlabel('D-V position')
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
         self._ax = ax
         return ax
 
