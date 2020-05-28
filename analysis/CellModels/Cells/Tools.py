@@ -1,4 +1,15 @@
+import logging
 import pandas as pd
+from collections.abc import Iterable
+
+from typing import Optional, Any
+
+from CellModels.Cells.Filters import Masks
+
+
+class classproperty(property):
+    def __get__(self, obj: Any, type: Optional[type] = ...):
+        return classmethod(self.fget).__get__(None, type)()
 
 
 class CellColumns:
@@ -41,7 +52,47 @@ class CellColumns:
                 tuples.append(cls._cols[i])
             elif i in misc.keys():
                 tuples.append(misc[i])
+            elif not isinstance(i, str) and isinstance(i, Iterable):
+                tuples.append(tuple(i))
             else:
-                tuples.append(i)
+                tuples.append((i, None))
 
         return tuples
+
+
+class CleanUp:
+
+    _logger = logging.getLogger('cell-reader')
+
+    SYNONYMS = {'CG1625': 'dila', 'CG6860': 'Lrch', 'CG8965': 'rau', 'HLHmdelta': 'E(spl)mdelta-HLH',
+                'king-tubby': 'ktub', 'n-syb': 'nSyb'}
+
+    @classmethod
+    def remove_artifacts(cls, cells):
+        if 'ZBO7IH' in cells.index.unique('Sample'):
+            idx = pd.IndexSlice
+            cls._logger.debug("Removing ZBO7IH blob artifact...")
+            mask = (cells[('Position', 'Normalized', 'y')] > 35) & \
+                   (cells[('Position', 'Normalized', 'x')] > 20) & \
+                   (cells[('Position', 'Normalized', 'x')] < 30)
+            artifact = cells.loc[idx[mask, 'ZBO7IH']].index
+            cells.drop(artifact, inplace=True)
+
+    @classmethod
+    def mark_bad_samples(cls, cells):
+        if 'CG9801' in cells.index.unique('Gene'):
+            cls._logger.debug("Marking bad CG9801 samples...")
+            cells.loc[Masks(cells).samples_bad_segm, 'Gene'] = 'CG9801-B'
+
+    @classmethod
+    def rename_cgs(cls, cells):
+        genes = cells.index.unique('Gene')
+        if set(cls.SYNONYMS.keys()).intersection(genes):
+            cls._logger.debug("Renaming CGs to their proper names...")
+            for gene, syn in cls.SYNONYMS.items():
+                if gene in genes:
+                    cells.rename(index={gene: syn}, level='Gene', inplace=True)
+
+    @classproperty
+    def all(cls):
+        return [cls.remove_artifacts, cls.mark_bad_samples, cls.rename_cgs]

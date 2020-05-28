@@ -1,63 +1,20 @@
+import logging
 import os
 import os.path as path
 import yaml
 
 from CellModels.Cells.IO import CellReader
-from CellModels.Cells.Tools import CellColumns
-from CellModels.Clustering.Data import ClusteringConfig, ClusteringResult, MultiClusteringResult
+from CellModels.Clustering.Data import ClusteringConfig, ClusteringResult, MultiClusteringResult, SampleSets
 
 
-class ClusteringReader(CellColumns):
+class ClusteringReader:
 
     @classmethod
     def read(cls, p):
-        if p.endswith(".yml"):
-            yml_path = p
-            csv_path = p.replace(".yml", ".csv")
-            h5_path = p.replace(".yml", ".h5")
-        elif p.endswith(".csv"):
-            yml_path = p.replace(".csv", ".yml")
-            csv_path = p
-            h5_path = None
-        elif p.endswith(".h5"):
-            h5_path = p
-            yml_path = p.replace(".h5", ".yml")
-            csv_path = None
-        else:
-            raise ValueError("Input path must be a HDF5, CSV or YAML file")
-
-        if csv_path:
-            try:
-                cells = CellReader.read(csv_path)
-            except:
-                pass
-        if h5_path:
-            try:
-                cells = CellReader.read_hdf(csv_path)
-            except:
-                pass
-
-        with open(yml_path) as yml_file:
-            metadata = yaml.load(yml_file, Loader=yaml.FullLoader)
-            mc = metadata['config']
-            config = ClusteringConfig(
-                mc['clusters'],
-                mc['samples'],
-                mc['repeats'],
-                mc['cutoff'],
-                mc['method'],
-                mc['metric'],
-                cls._t_list(mc['hc_features']),
-                cls._t_list(mc['rf_features'])
-            )
-            sample_sets = metadata['samples']
-
-        misc = {'Cluster_' + config.method: ('Cluster', config.method, config.clusters)}
-        c = cells.cells.set_index(['Gene', 'Sample', 'Nucleus']).sort_index()
-        c.columns = cls._multi_index(c.columns, misc)
-        result = ClusteringResult(c, sample_sets, config)
-
-        return result
+        cells = CellReader.read(p)
+        config = ClusteringConfig(cells.metadata)
+        sample_sets = SampleSets(cells.metadata)
+        return ClusteringResult(cells, sample_sets, config)
 
 
 class MultiClusteringReader:
@@ -76,3 +33,28 @@ class MultiClusteringReader:
             results.append(ClusteringReader.read(file))
 
         return MultiClusteringResult(results)
+
+
+class ClusteringResultsWriter:
+
+    _logger = logging.getLogger('cell-writer')
+
+    @staticmethod
+    def write(rs, fn, of='hdf5'):
+        ClusteringResultsWriter._logger.info("Writing results to " + str(fn))
+        dirname = os.path.dirname(fn)
+        basename = os.path.basename(fn)
+        fn = os.path.splitext(basename)[0]
+        metadata = {
+            'config': rs.config.to_dict(),
+            'samples': rs.sample_sets
+        }
+        with open(os.path.join(dirname, fn + '.yml'), 'w') as mf:
+            yaml.dump(metadata, mf)
+        if of == 'hdf5':
+            pass
+        elif of == 'csv':
+            rs.cells.to_csv(os.path.join(dirname, fn + '.csv'))
+
+        else:
+            raise ValueError('Wrong output format specified (only hdf5 and csv allowed).')

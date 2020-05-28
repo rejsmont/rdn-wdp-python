@@ -2,105 +2,107 @@ import logging
 import os
 import warnings
 import yaml
-
 import pandas as pd
 
-from CellModels.Data import Cells
-from CellModels.Filters import Masks
+from CellModels.Cells.Data import Cells
 
 
 class CellReader:
 
     _logger = logging.getLogger('cell-reader')
-    SYNONYMS = {'CG1625': 'dila', 'CG6860': 'Lrch', 'CG8965': 'rau', 'HLHmdelta': 'E(spl)mdelta-HLH',
-                'king-tubby': 'ktub', 'n-syb': 'nSyb'}
 
-    @staticmethod
-    def read(data, try_metadata=True):
-        CellReader._logger.info("Reading cells from " + str(data))
+    READERS = ['_from_df', '_from_csv', '_from_hdf', '_from_yml']
+
+    @classmethod
+    def read(cls, p, m=None):
+        cls._logger.info("Reading cells from " + str(p))
         cells = None
-        readers = ['_from_df', '_from_csv']
-        if try_metadata:
-            readers.append('_from_yml')
-        for reader in [getattr(CellReader, x) for x in readers]:
-            cells = reader(data)
+        for reader in [getattr(cls, x) for x in cls.READERS]:
+            cells = reader(p, m)
             if cells is not None:
                 break
         return cells
 
-    @staticmethod
-    def _from_df(data, source=None):
-        CellReader._logger.debug("Attempting to read from DF")
-        if data is not None and isinstance(data, pd.DataFrame) and len(data.index) != 0:
-            data = CellReader._clean_up(data)
-            return Cells(data, source)
+    @classmethod
+    def _from_df(cls, d, m=None, s=None):
+        if d is not None and isinstance(d, pd.DataFrame) and len(d.index) != 0:
+            cls._logger.debug("Attempting to read from DF")
+            return Cells(d, m, s)
         else:
             return None
 
-    @staticmethod
-    def _from_csv(datafile):
+    @classmethod
+    def _from_csv(cls, f, m=None):
         try:
-            CellReader._logger.debug("Attempting to read from CSV")
+            cls._logger.debug("Attempting to read from CSV")
             with warnings.catch_warnings():
                 warnings.simplefilter(action='ignore', category=FutureWarning)
-                data = pd.read_csv(datafile, low_memory=False).set_index('ID')
-            return CellReader._from_df(data, datafile)
+                d = pd.read_csv(f, low_memory=False).set_index('ID')
+                if m is None:
+                    m = cls._from_yml('.'.join(f.split('.')[:-1]) + '.yml', m_only=True)
+            return cls._from_df(d, m, f)
+        except Exception as e:
+            raise e
+            return None
+
+    @classmethod
+    def _from_hdf(cls, f, m=None):
+        try:
+            cls._logger.debug("Attempting to read from HDF")
+            with warnings.catch_warnings():
+                warnings.simplefilter(action='ignore', category=FutureWarning)
+                if ':' in f:
+                    fn = ':'.join(f.split(':')[:-1])
+                    ds = f.split(':')[-1]
+                else:
+                    fn = f
+                    ds = None
+                d = pd.read_hdf(fn, ds)
+                if m is None:
+                    m = cls._from_yml('.'.join(f.split('.')[:-1]) + '.yml', m_only=True)
+            return cls._from_df(d, m, f)
         except:
             return None
 
-    @staticmethod
-    def _from_yml(datafile):
-        if str(datafile).endswith('yml'):
-            with open(datafile, 'r') as stream:
-                CellReader._logger.debug("Attempting to read from YML")
-                metadata = yaml.safe_load(stream)
-                return CellReader._from_metadata(metadata, datafile)
+    @classmethod
+    def _from_yml(cls, f, m_only=False):
+        if str(f).endswith('yml'):
+            with open(f, 'r') as s:
+                cls._logger.debug("Attempting to read from YML")
+                m = yaml.safe_load(s)
+                if m_only:
+                    return m
+                else:
+                    return cls._from_metadata(m, f)
         else:
             return None
 
-    @staticmethod
-    def _from_metadata(metadata, source=None):
+    @classmethod
+    def _from_metadata(cls, m, s=None):
 
         def explore(func, path, basedir=None, **kwargs):
             paths = [path, os.path.basename(path)]
             if basedir is not None:
                 paths.append(os.path.join(basedir, path))
-            if source is not None:
-                paths.append(os.path.join(os.path.dirname(source), path))
+            if s is not None:
+                paths.append(os.path.join(os.path.dirname(s), path))
             result = None
             for path in paths:
                 try:
-                    CellReader._logger.debug("Trying to read data from " + str(path))
+                    cls._logger.debug("Trying to read data from " + str(path))
                     result = func(path, **kwargs)
                 except:
                     continue
                 break
             return result
 
-        if metadata is None:
+        if m is None:
             return None
 
-        return explore(CellReader._from_csv, metadata['input']['cells'], metadata['input']['dir'])
-
-    @staticmethod
-    def _clean_up(cells):
-        CellReader._logger.debug("Data cleanup...")
-        # Remove artifact from sample ZBO7IH
-        CellReader._logger.debug("Removing ZBO7IH blob artifact...")
-        artifact = cells[(cells['Sample'] == 'ZBO7IH') &
-                         (cells['cy'] > 35) &
-                         (cells['cx'] > 20) &
-                         (cells['cx'] < 30)].index
-        cells = cells.drop(artifact)
-
-        # Mark bad CG9801 samples
-        CellReader._logger.debug("Marking bad CG9801 samples...")
-        m = Masks(cells)
-        cells.loc[m.samples_bad_segm, 'Gene'] = 'CG9801-B'
-
-        # Rename some CGs to proper gene names
-        CellReader._logger.debug("Renaming CGs to their proper names...")
-        for gene, syn in CellReader.SYNONYMS.items():
-            cells.loc[cells['Gene'] == gene, 'Gene'] = syn
-
+        cells = None
+        readers = list(filter(lambda x: (x != '_from_yml') and (x != '_from_df'), cls.READERS))
+        for reader in [getattr(cls, x) for x in readers]:
+            cells = explore(reader, m['input']['cells'], m['input']['dir'])
+            if cells is not None:
+                break
         return cells

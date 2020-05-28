@@ -3,9 +3,11 @@
 import argparse
 import logging
 
-from CellModels.Cluster import ClusteringConfig, Clustering
-from CellModels.Filters import Masks
-from CellModels.IO import CellReader, ClusteringResultsWriter
+from CellModels.Cells.Filters import Masks
+from CellModels.Cells.IO import CellReader
+from CellModels.Clustering.Compute import Clustering
+from CellModels.Clustering.Data import ClusteringConfig
+from CellModels.Clustering.IO import ClusteringResultsWriter
 
 
 if __name__ == "__main__":
@@ -65,4 +67,3 @@ if __name__ == "__main__":
     clustering = Clustering(config, cells, training)
     res = clustering.classify()
     ClusteringResultsWriter.write(res, args.output)
-

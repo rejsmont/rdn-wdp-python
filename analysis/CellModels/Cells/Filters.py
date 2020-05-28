@@ -2,25 +2,34 @@ import pandas as pd
 # from dask import dataframe as pd
 
 
-class ColumnMappedList(list):
+class MappedList(list):
     """
-    List that contains a column name field
+        List that contains a name field
     """
-    def __init__(self, c, seq=()):
+
+    def __init__(self, m, seq=()):
         super().__init__(seq)
-        self._column = c
+        self._mapping = m
 
     @property
-    def column(self):
-        return self._column
+    def mapping(self):
+        return self._mapping
 
 
-class GenesColumnMappedList(ColumnMappedList):
+class ColumnMappedList(MappedList):
+    pass
+
+
+class IndexMappedList(MappedList):
+    pass
+
+
+class GenesIndexMappedList(IndexMappedList):
     def __init__(self, seq=()):
         super().__init__('Gene', seq)
 
 
-class SamplesColumnMappedList(ColumnMappedList):
+class SamplesIndexMappedList(IndexMappedList):
     def __init__(self, seq=()):
         super().__init__('Sample', seq)
 
@@ -31,34 +40,34 @@ class QC:
     """
 
     # Genes with clean Ato expression
-    GENES_CLEAN = GenesColumnMappedList([
+    GENES_CLEAN = GenesIndexMappedList([
         'CG31176', 'beat-IIIc', 'king-tubby', 'lola-P', 'nmo', 'sNPF', 'Vn', 'Fas2', 'siz'
     ])
 
     # Genes for which wrong reporter expression pattern has been confirmed
-    GENES_BAD = GenesColumnMappedList([
+    GENES_BAD = GenesIndexMappedList([
         'beat-IIIc', 'CG17378', 'CG31176', 'dap', 'lola-P', 'nmo', 'CG30343', 'phyl', 'siz', 'sNPF', 'spdo', 'Vn'
     ])
 
     # Genes with no reporter expression
-    GENES_NO_TARGET = GenesColumnMappedList([
+    GENES_NO_TARGET = GenesIndexMappedList([
         'beat-IIIc', 'CG17378', 'CG31176', 'lola-P', 'nmo', 'CG30343', 'phyl', 'siz', 'sNPF', 'spdo', 'Vn'
     ])
 
     # Genes with known damage within the reporter construct
-    GENES_DAMAGED = GenesColumnMappedList(['beat-IIIc', 'lola-P', 'nmo', 'siz', 'sNPF', 'Vn'])
+    GENES_DAMAGED = GenesIndexMappedList(['beat-IIIc', 'lola-P', 'nmo', 'siz', 'sNPF', 'Vn'])
 
     # Genes known to be expressed in the eye-disc, yet not reflected in reporter expression
-    GENES_SHOULD = GenesColumnMappedList(['phyl', 'spdo'])
+    GENES_SHOULD = GenesIndexMappedList(['phyl', 'spdo'])
 
     # Samples for which segmentation has failed
-    SAMPLES_BAD_SEGM = SamplesColumnMappedList([
+    SAMPLES_BAD_SEGM = SamplesIndexMappedList([
         'J0RYWJ', '3SKX4V', '7AMINR', '4EAAEF', 'VH2DCR', 'WJ8F8M', 'ZNVOPe', 'APKoAe', 'zfroDh', 'lgxpL6', 'pcTNzE',
         '80IkVQ', 'UQZJ3K'
     ])
 
-    # Samples for which classification has failed
-    SAMPLES_BAD_CLASS = SamplesColumnMappedList([
+    # Samples for which Ato classification has failed
+    SAMPLES_BAD_CLASS = SamplesIndexMappedList([
         'hVJG7F', 't4JOuq', 'ylcNLd', '1NP0AI', '7SNHJY', 'BQ5PR8', 'DWYW27', 'I9BTQL', 'A5UIWC', 'KWGZHQ', 'M6GF25',
         'IJ5NUJ', 'WSSIG8', '3JR9EY', 'F7ZYLW', 'HDJ4XA', 'K2TCAP', 'OS7ENG', 'XC0ZUP', '61C1JS', '7RF4GF', 'AT7VB2',
         'CF4H1M', 'M946YU', 'S9PW43', '1BBD7G', '88Q70R', 'FC3922', 'QVBXHU', 'X88DWV', '05U0AU', '3LS10Z', 'CD2J9U',
@@ -69,8 +78,8 @@ class QC:
         'CX8CT6', '8XHGAV', 'LMeg2F', 'R6F3J5'
     ])
 
-    # Samples with marginally satisfactory classification results
-    SAMPLES_MARGINAL_CLASS = SamplesColumnMappedList([
+    # Samples with marginally satisfactory Ato classification results
+    SAMPLES_MARGINAL_CLASS = SamplesIndexMappedList([
         'TY2COS', 'YZDFTH', 'NSOK5I', 'RVOX2M', 'D0CTSD', 'H7WOUU', 'RWPK00', '4SDPFB', 'H9OS9A', 'IU43O6', 'OHXME8',
         'TYEOK6', 'VDOERX', 'hsZ6pl', 'R4JB64', 'RKNAC2', '64EQVJ', 'lCUF2l', 'HG24ZO', 'TWP10V', '3QOEXZ', '8HTKXA',
         'ORR8VN', '5IEVIW', 'ETUQB6', 'VK3DU4', 'PV2RPF', 'QLOP4L', 'W4CQNL', 'Y7UX2N', 'Z2JP1B', '4FYXUO', 'HJ4QFN',
@@ -109,11 +118,11 @@ class Morphology:
     """
 
     # Broad area of the morphogenetic furrow (roughly equivalent to Ato expression zone)
-    FURROW_BROAD = MinMax(-8.0, 8.0, 'cy')
+    FURROW_BROAD = MinMax(-8.0, 8.0, ('Position', 'Normalized', 'y'))
     # Center of the morphogenetic furrow, an area with maximum Ato expression
-    FURROW_PEAK = MinMax(-2.0, 2.0, 'cy')
+    FURROW_PEAK = MinMax(-2.0, 2.0, ('Position', 'Normalized', 'y'))
     # The morphogenetic furrow
-    FURROW = MinMax(-4.0, 4.0, 'cy')
+    FURROW = MinMax(-4.0, 4.0, ('Position', 'Normalized', 'y'))
 
 
 class Masks:
@@ -133,10 +142,13 @@ class Masks:
         self._samples_marginal_class = None
         self._cells_mf_area = None
 
-    def _mask_in_getter(self, p, i):
+    def _mask_in_getter(self, p, i: MappedList):
         v = getattr(self, p)
         if v is None:
-            v = self._cells[i.column].isin(i)
+            if isinstance(i, ColumnMappedList):
+                v = self._cells[i.mapping].isin(i)
+            elif isinstance(i, IndexMappedList):
+                v = self._cells.index.get_level_values(i.mapping).isin(i)
             setattr(self, p, v)
         return v
 

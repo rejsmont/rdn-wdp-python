@@ -1,33 +1,49 @@
 #!/usr/bin/env python3
+from collections import Iterable
 
 import numpy as np
 import pandas as pd
+
+from CellModels.Cells.Tools import CellColumns
 from CellModels.Cluster import ClusteringResult as OriginalClusteringResult
 from CellModels.Clustering.Tools import ClusteringTools, MultiClusteringTools
 
 
-class ClusteringConfig:
+class ClusteringConfig(CellColumns):
 
     ITER_MAX = 1000
     MIN_SCORE = 1e-10
-    HC_FEATURES = ['cy', 'mCherry', 'ext_mCherry']
-    RF_FEATURES = ['cx', 'cy', 'cz', 'mCherry', 'ext_mCherry', 'ang_max_mCherry', 'Volume']
+    HC_FEATURES = [
+        ('Position', 'Normalized', 'y'),
+        ('Measurements', 'Normalized', 'mCherry'),
+        ('Measurements', 'Prominence', 'mCherry')
+    ]
+    RF_FEATURES = [
+        ('Position', 'Normalized', 'x'),
+        ('Position', 'Normalized', 'y'),
+        ('Position', 'Normalized', 'z'),
+        ('Measurements', 'Normalized', 'mCherry'),
+        ('Measurements', 'Prominence', 'mCherry'),
+        ('Measurements', 'Angle', 'mCherry'),
+        ('Measurements', 'Raw', 'Volume')
+    ]
 
-    def __init__(self, k, n, r, cutoff=-1, method='ward', metric='euclidean', hc_features=None, rf_features=None):
-        self._clusters = k
-        self._samples = n
-        self._repeats = r
-        self._cutoff = cutoff
-        self._method = method
-        self._metric = metric
-        if hc_features is None:
-            self._hc_features = self.HC_FEATURES
-        else:
-            self._hc_features = hc_features
-        if rf_features is None:
-            self._rf_features = self.RF_FEATURES
-        else:
-            self._rf_features = rf_features
+    def __init__(self, m):
+        if 'clustering' in m.keys():
+            m = m['clustering']
+        m = m['config']
+        c = m.get('clusters', None)
+        self._clusters = c if isinstance(c, Iterable) else [c]
+        assert self._clusters is not None, 'Number of clusters must be specified.'
+        self._samples = m.get('samples', None)
+        assert self._clusters is not None, 'Number of samples must be specified.'
+        self._repeats = m.get('repeats', None)
+        assert self._clusters is not None, 'Number of repeats must be specified.'
+        self._cutoff = m.get('cutoff', -1)
+        self._method = m.get('method', 'ward')
+        self._metric = m.get('metric', 'euclidean')
+        self._hc_features = self._t_list(m.get('hc_features', self.HC_FEATURES))
+        self._rf_features = self._t_list(m.get('rf_features', self.RF_FEATURES))
 
     @property
     def clusters(self):
@@ -74,14 +90,28 @@ class ClusteringConfig:
         }
 
 
+class SampleSets(dict):
+
+    def __init__(self, m):
+        if 'clustering' in m.keys():
+            m = m['clustering']
+        samples = m.get('samples', None)
+        assert samples is not None, 'No sample sets were found in metadata.'
+        super().__init__(samples)
+
+
 class ClusteringResult(OriginalClusteringResult, ClusteringTools):
 
-    def __init__(self, cells, sets, config, clusters=None, centroids=None):
+    def __init__(self, cells, sets, config, clusters=None, centroids=None, training=None, test=None, performance=None):
         self._cells = cells
         self._sample_sets = sets
         self._config = config
         self._clusters = clusters
         self._centroids = centroids
+        self._training = training
+        self._test = test
+        self._cells = self._set_multi_index(self._cells, self._config)
+        self._performance = performance
 
     @property
     def cells(self):
@@ -103,43 +133,60 @@ class ClusteringResult(OriginalClusteringResult, ClusteringTools):
     def centroids(self):
         return self._centroids
 
+    @property
+    def training(self):
+        return self._training
+
+    @property
+    def test(self):
+        return self._test
+
+    @classmethod
+    def _set_multi_index(cls, data, config):
+        e = [np.nan for x in range(data.columns.nlevels - 1)]
+        n = [
+            tuple(['Cluster_' + config.method] + e),
+            tuple(['Cluster_' + config.method + '_' + str(config.clusters[0])] + e)
+        ]
+        t = data.columns.to_list()
+        for i, c in enumerate(t):
+            for m in n:
+                if c == m:
+                    t[i] = ('Cluster', config.method, config.clusters[0])
+        data.columns = pd.MultiIndex.from_tuples(t)
+        return data
+
 
 class MultiClusteringResult(ClusteringResult):
 
     def __init__(self, results):
         reference = None
-        clusters = []
         cells = None
+        k = []
+        clusters = {}
+        centroids = {}
 
         for result in results:
+            current = result.config.to_dict()
+            ck = current['clusters']
+            del current['clusters']
+            k.append(ck)
             if reference is None:
-                reference = result.config.to_dict()
-                clusters.append(reference['clusters'])
-                del reference['clusters']
-            else:
-                current = result.config.to_dict()
-                clusters.append(current['clusters'])
-                del current['clusters']
-                if current != reference:
-                    raise ValueError("Clustering parameters (except k) must be the same for all results.")
-
+                reference = current
+            assert current == reference, "Clustering parameters (except k) must be the same for all results."
             if cells is None:
                 cells = result.cells.copy()
             else:
                 column = ('Cluster', result.config.method, result.config.clusters)
                 cells[column] = result.cells[column]
+            clusters[ck] = result.clusters
+            centroids[ck] = result.centroids
 
+        reference['clusters'] = k
         self._cells = cells
-        self._config = ClusteringConfig(
-            clusters,
-            reference['samples'],
-            reference['repeats'],
-            reference['cutoff'],
-            reference['method'],
-            reference['metric'],
-            reference['hc_features'],
-            reference['rf_features']
-        )
+        self._config = ClusteringConfig(reference)
+        self._clusters = clusters
+        self._centroids = centroids
 
     @property
     def cells(self):
@@ -148,6 +195,14 @@ class MultiClusteringResult(ClusteringResult):
     @property
     def config(self):
         return self._config
+
+    @property
+    def clusters(self):
+        return self._clusters
+
+    @property
+    def centroids(self):
+        return self._centroids
 
 
 class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
