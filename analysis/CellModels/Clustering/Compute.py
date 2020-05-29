@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
-from IPython.core.display import display
 from scipy.spatial.distance import cdist
 from scipy import stats
 from sklearn.ensemble import RandomForestClassifier
@@ -17,7 +16,7 @@ import hashlib
 import statistics
 
 from CellModels.Cells.Filters import Morphology
-from CellModels.Clustering.Data import ClusteringResult
+from CellModels.Clustering.Data import ClusteringResult, MultiClusteringResult
 
 
 class Clustering:
@@ -54,7 +53,13 @@ class Clustering:
             self._logger.warning("The repeats are set to more than 1. Consider using the classify method.")
         self._find_centroids()
         r = self._result
-        return ClusteringResult(r.cells, r.sample_sets, self._config, r.clusters, r.centroids)
+
+        if len(self._config.clusters) > 1:
+            cls = MultiClusteringResult
+        else:
+            cls = ClusteringResult
+
+        return cls(r.cells, r.sample_sets, self._config, r.clusters, r.centroids)
 
     def classify(self):
         if len(self._data.index.unique('Sample')) <= self._config.samples:
@@ -67,10 +72,16 @@ class Clustering:
         self._cluster_centroids()
         self._random_forest()
         r = self._result
-        return ClusteringResult(r.cells, r.sample_sets, self._config, r.clusters, r.centroids,
-                                self._training[~self._training.index.isin(self._test)],
-                                self._training[self._training.index.isin(self._test)],
-                                r.performance)
+
+        if len(self._config.clusters) > 1:
+            cls = MultiClusteringResult
+        else:
+            cls = ClusteringResult
+
+        return cls(r.cells, r.sample_sets, self._config, r.clusters, r.centroids,
+                   self._training[~self._training.index.isin(self._test)],
+                   self._training[self._training.index.isin(self._test)],
+                   r.performance)
 
     @staticmethod
     def _is_one_gene(samples):

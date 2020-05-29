@@ -4,6 +4,8 @@ from collections import Iterable
 import numpy as np
 import pandas as pd
 
+from typing import List, Union, Dict
+
 from CellModels.Cells.Tools import CellColumns
 from CellModels.Cluster import ClusteringResult as OriginalClusteringResult
 from CellModels.Clustering.Tools import ClusteringTools, MultiClusteringTools
@@ -102,7 +104,13 @@ class SampleSets(dict):
 
 class ClusteringResult(OriginalClusteringResult, ClusteringTools):
 
-    def __init__(self, cells, sets, config, clusters=None, centroids=None, training=None, test=None, performance=None):
+    def __init__(self, cells: pd.DataFrame, sets: SampleSets, config: ClusteringConfig,
+                 clusters=None, centroids=None, training=None, test=None, performance=None):
+
+        if len(config.clusters) != 1 and self.__class__ == ClusteringResult:
+            raise ValueError("ClusteringResult handles only single clustering results. " +
+                             "Use MultiClusteringResult for handing multiple clustering results.")
+
         self._cells = cells
         self._sample_sets = sets
         self._config = config
@@ -141,8 +149,12 @@ class ClusteringResult(OriginalClusteringResult, ClusteringTools):
     def test(self):
         return self._test
 
+    @property
+    def performance(self):
+        return self._performance
+
     @classmethod
-    def _set_multi_index(cls, data, config):
+    def _set_multi_index(cls, data: pd.DataFrame, config: ClusteringConfig):
         e = [np.nan for x in range(data.columns.nlevels - 1)]
         n = [
             tuple(['Cluster_' + config.method] + e),
@@ -159,50 +171,45 @@ class ClusteringResult(OriginalClusteringResult, ClusteringTools):
 
 class MultiClusteringResult(ClusteringResult):
 
-    def __init__(self, results):
-        reference = None
-        cells = None
-        k = []
-        clusters = {}
-        centroids = {}
+    def __init__(self, data: Union[List[ClusteringResult], pd.DataFrame], sets: SampleSets, config: ClusteringConfig,
+                 clusters=None, centroids=None, training=None, test=None, performance=None):
 
-        for result in results:
-            current = result.config.to_dict()
-            ck = current['clusters']
-            del current['clusters']
-            k.append(ck)
-            if reference is None:
-                reference = current
-            assert current == reference, "Clustering parameters (except k) must be the same for all results."
-            if cells is None:
-                cells = result.cells.copy()
-            else:
-                column = ('Cluster', result.config.method, result.config.clusters)
-                cells[column] = result.cells[column]
-            clusters[ck] = result.clusters
-            centroids[ck] = result.centroids
+        if isinstance(data, list):
+            reference = None
+            cells = None
+            k = []
+            clusters = None
+            centroids = None
 
-        reference['clusters'] = k
-        self._cells = cells
-        self._config = ClusteringConfig(reference)
-        self._clusters = clusters
-        self._centroids = centroids
+            for result in data:
+                current = result.config.to_dict()
+                ck = current['clusters'].pop()
+                del current['clusters']
+                k += ck
+                if reference is None:
+                    reference = current
+                assert current == reference, "Clustering parameters (except k) must be the same for all results."
+                if cells is None:
+                    cells = result.cells.copy()
+                else:
+                    for n in result.config.clusters:
+                        column = ('Cluster', result.config.method, n)
+                        cells[column] = result.cells[column]
+                if clusters is None:
+                    clusters = result.clusters
+                else:
+                    clusters = clusters.append(result.clusters)
+                if centroids is None:
+                    centroids = result.centroids
+                else:
+                    centroids = centroids.append(result.centroids)
 
-    @property
-    def cells(self):
-        return self._cells
+            reference['clusters'] = k
+            config = ClusteringConfig(reference)
+        else:
+            cells = data
 
-    @property
-    def config(self):
-        return self._config
-
-    @property
-    def clusters(self):
-        return self._clusters
-
-    @property
-    def centroids(self):
-        return self._centroids
+        super().__init__(cells, sets, config, clusters, centroids, training, test, performance)
 
 
 class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):

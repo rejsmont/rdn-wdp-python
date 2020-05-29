@@ -40,15 +40,17 @@ class ClusteringResultsWriter:
     _logger = logging.getLogger('cell-writer')
 
     @staticmethod
-    def write(rs, fn, of='hdf5'):
+    def write(rs: ClusteringResult, fn, of='hdf5'):
         ClusteringResultsWriter._logger.info("Writing results to " + str(fn))
         dirname = os.path.dirname(fn)
         basename = os.path.basename(fn)
         fn = os.path.splitext(basename)[0]
-        metadata = {
+        clustering = {
             'config': rs.config.to_dict(),
-            'samples': rs.sample_sets
+            'samples': rs.sample_sets,
+            'performance': rs.performance
         }
+        metadata = {'clustering': clustering}
         with open(os.path.join(dirname, fn + '.yml'), 'w') as mf:
             yaml.dump(metadata, mf)
         if of == 'hdf5':
