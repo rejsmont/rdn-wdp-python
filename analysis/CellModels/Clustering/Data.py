@@ -87,8 +87,8 @@ class ClusteringConfig(CellColumns):
             'cutoff': self.cutoff,
             'method': self.method,
             'metric': self.metric,
-            'rf_features': self.rf_features,
-            'hc_features': self.hc_features
+            'rf_features': [list(x) if isinstance(x, tuple) else x for x in self.rf_features],
+            'hc_features': [list(x) if isinstance(x, tuple) else x for x in self.hc_features]
         }
 
 

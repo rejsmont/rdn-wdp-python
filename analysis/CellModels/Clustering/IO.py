@@ -41,22 +41,30 @@ class ClusteringResultsWriter:
 
     @staticmethod
     def write(rs: ClusteringResult, fn, of='hdf5'):
-        ClusteringResultsWriter._logger.info("Writing results to " + str(fn))
         dirname = os.path.dirname(fn)
         basename = os.path.basename(fn)
         fn = os.path.splitext(basename)[0]
+        ex = os.path.splitext(basename)[1]
         clustering = {
             'config': rs.config.to_dict(),
             'samples': rs.sample_sets,
             'performance': rs.performance
         }
         metadata = {'clustering': clustering}
-        with open(os.path.join(dirname, fn + '.yml'), 'w') as mf:
+        mf_name = os.path.join(dirname, fn + '.yml')
+        with open(mf_name, 'w') as mf:
+            ClusteringResultsWriter._logger.info("Writing metadata to " + mf_name)
             yaml.dump(metadata, mf)
         if of == 'hdf5':
-            pass
+            rf_name = os.path.join(dirname, fn + ex)
+            ClusteringResultsWriter._logger.info("Writing clustering results to " + rf_name + " using HDF5 writer")
+            rs.cells.to_hdf(rf_name, 'clustering/cells')
+            rs.clusters.to_hdf(rf_name, 'clustering/clusters')
+            rs.centroids.to_hdf(rf_name, 'clustering/centroids')
+            rs.training.index.to_frame().to_hdf(rf_name, 'clustering/training')
+            rs.test.index.to_frame().to_hdf(rf_name, 'clustering/test')
         elif of == 'csv':
+            ClusteringResultsWriter._logger.info("Writing clustering results to " + str(fn) + " using CSV writer")
             rs.cells.to_csv(os.path.join(dirname, fn + '.csv'))
-
         else:
             raise ValueError('Wrong output format specified (only hdf5 and csv allowed).')

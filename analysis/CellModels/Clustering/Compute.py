@@ -51,6 +51,7 @@ class Clustering:
                                  "Setting the repeats to more than 1 does not make much sense.")
         elif self._config.repeats > 1:
             self._logger.warning("The repeats are set to more than 1. Consider using the classify method.")
+
         self._find_centroids()
         r = self._result
 
@@ -319,11 +320,11 @@ class Clustering:
             cells[('Cluster', c.method, n)] = rf.predict(self._data[c.rf_features])
             b = np.array(training.loc[:, ('Centroid cluster', c.method, n)] ==
                          cells.loc[training.index, ('Cluster', c.method, n)]).astype(int)
-            train_performance = np.sum(b) / b.size
+            train_performance = float(np.sum(b) / b.size)
             self._logger.debug('Training set performance: ' + str(train_performance))
             b = np.array(test.loc[:, ('Centroid cluster', c.method, n)] ==
                          cells.loc[test.index, ('Cluster', c.method, n)]).astype(int)
-            test_performance = np.sum(b) / b.size
+            test_performance = float(np.sum(b) / b.size)
             self._logger.debug('Test set performance: ' + str(test_performance))
             if train_performance - test_performance > 0.05:
                 self._logger.warning('Possible model overfit')
