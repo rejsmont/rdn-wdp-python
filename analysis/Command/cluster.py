@@ -2,8 +2,9 @@
 
 import argparse
 import logging
+import os
 import sys
-sys.path.append('../')
+sys.path.append(os.path.join(sys.path[0], '..'))
 
 from CellModels.Cells.Filters import Masks
 from CellModels.Cells.IO import CellReader
