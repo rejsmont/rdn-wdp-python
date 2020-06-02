@@ -2,14 +2,12 @@
 
 import argparse
 import logging
-import sys
-sys.path.append('../')
 
-from CellModels.Cells.Filters import Masks
-from CellModels.Cells.IO import CellReader
-from CellModels.Clustering.Compute import Clustering
-from CellModels.Clustering.Data import ClusteringConfig
-from CellModels.Clustering.IO import ClusteringResultsWriter
+from ..CellModels.Cells.Filters import Masks
+from ..CellModels.Cells.IO import CellReader
+from ..CellModels.Clustering.Compute import Clustering
+from ..CellModels.Clustering.Data import ClusteringConfig
+from ..CellModels.Clustering.IO import ClusteringResultsWriter
 
 
 def run(a):
