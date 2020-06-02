@@ -71,7 +71,7 @@ def run(a):
         training = training[~ masks.samples_bad_segm]
 
     config = ClusteringConfig({
-        'clusters': a.clusters,
+        'clusters': a.clusters.replace(',', ' ').split(),
         'samples': a.samples,
         'repeats': a.repeats,
         'cutoff': a.cutoff,
@@ -90,6 +90,8 @@ def run(a):
         res = clustering.classify()
     elif a.mode == 'cluster':
         res = clustering.cluster()
+    else:
+        raise ValueError('Only \'classify\' and \'cluster\' can be specified as modes.')
     ClusteringResultsWriter.write(res, a.output)
 
 
