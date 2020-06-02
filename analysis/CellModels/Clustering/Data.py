@@ -36,7 +36,7 @@ class ClusteringConfig(CellColumns):
         if 'config' in m.keys():
             m = m['config']
         c = m.get('clusters', None)
-        self._clusters = c if isinstance(c, Iterable) else [c]
+        self._clusters = [int(i) for i in (c if isinstance(c, Iterable) else [c])]
         assert self._clusters is not None, 'Number of clusters must be specified.'
         self._samples = m.get('samples', None)
         assert self._clusters is not None, 'Number of samples must be specified.'
