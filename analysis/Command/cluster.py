@@ -2,6 +2,8 @@
 
 import argparse
 import logging
+import sys
+sys.path.append('../')
 
 from CellModels.Cells.Filters import Masks
 from CellModels.Cells.IO import CellReader
@@ -102,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('-g', '--gene', type=str, default='')
     parser.add_argument('-l', '--sample-list', type=str, default='')
     parser.add_argument('-f', '--furrow', action='store_true')
-    parser.add_argument('-m', '--mode', type=str, default='classify')
+    parser.add_argument('-d', '--mode', type=str, default='classify')
     parser.add_argument('--no-bad', action='store_true')
     parser.add_argument('--log')
     parser.add_argument('output')
