@@ -33,7 +33,8 @@ class ClusteringConfig(CellColumns):
     def __init__(self, m):
         if 'clustering' in m.keys():
             m = m['clustering']
-        m = m['config']
+        if 'config' in m.keys():
+            m = m['config']
         c = m.get('clusters', None)
         self._clusters = c if isinstance(c, Iterable) else [c]
         assert self._clusters is not None, 'Number of clusters must be specified.'

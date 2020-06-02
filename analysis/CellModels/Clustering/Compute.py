@@ -33,17 +33,22 @@ class Clustering:
             self.performance = {}
 
     def __init__(self, config, data, training=None, test=None):
-        self._data = data
+        fields = config.hc_features + config.rf_features
+        # Make sure that data does not contain NaNs in the fields used for clustering
+        self._data = data.loc[data[fields].dropna().index]
         if training is None:
             self._training = data
         else:
-            self._training = training
+            # Make sure that training data does not contain NaNs in the fields used for clustering
+            self._training = training.loc[training[fields].dropna().index]
         self._config = config
         self._result = None
         if test is None:
+            # Use 10% of data for performance testing
             self._test = self._training.sample(frac=0.1).sort_index().index
         else:
-            self._test = test
+            # Make sure that test data does not contain NaNs in the fields used for clustering
+            self._test = test.loc[test[fields].dropna().index]
 
     def cluster(self):
         if len(self._data.index.unique('Sample')) <= self._config.samples and self._config.repeats > 1:
@@ -53,6 +58,8 @@ class Clustering:
             self._logger.warning("The repeats are set to more than 1. Consider using the classify method.")
 
         self._find_centroids()
+        if self._config.repeats > 1:
+            self._cluster_centroids()
         r = self._result
 
         if len(self._config.clusters) > 1:

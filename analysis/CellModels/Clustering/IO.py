@@ -61,8 +61,10 @@ class ClusteringResultsWriter:
             rs.cells.to_hdf(rf_name, 'clustering/cells')
             rs.clusters.to_hdf(rf_name, 'clustering/clusters')
             rs.centroids.to_hdf(rf_name, 'clustering/centroids')
-            rs.training.index.to_frame().to_hdf(rf_name, 'clustering/training')
-            rs.test.index.to_frame().to_hdf(rf_name, 'clustering/test')
+            if rs.training is not None:
+                rs.training.index.to_frame().to_hdf(rf_name, 'clustering/training')
+            if rs.test is not None:
+                rs.test.index.to_frame().to_hdf(rf_name, 'clustering/test')
         elif of == 'csv':
             ClusteringResultsWriter._logger.info("Writing clustering results to " + str(fn) + " using CSV writer")
             rs.cells.to_csv(os.path.join(dirname, fn + '.csv'))

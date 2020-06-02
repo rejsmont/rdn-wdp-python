@@ -67,13 +67,16 @@ class CellReader:
     @classmethod
     def _from_yml(cls, f, m_only=False):
         if str(f).endswith('yml'):
-            with open(f, 'r') as s:
-                cls._logger.debug("Attempting to read from YML")
-                m = yaml.safe_load(s)
-                if m_only:
-                    return m
-                else:
-                    return cls._from_metadata(m, f)
+            try:
+                with open(f, 'r') as s:
+                    cls._logger.debug("Attempting to read from YML")
+                    m = yaml.safe_load(s)
+                    if m_only:
+                        return m
+                    else:
+                        return cls._from_metadata(m, f)
+            except:
+                return None
         else:
             return None
 
