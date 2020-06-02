@@ -98,7 +98,7 @@ def run(a):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Cluster cells based on gene expression')
     parser.add_argument('input')
-    parser.add_argument('-k', '--clusters', type=int, default=6)
+    parser.add_argument('-k', '--clusters', type=str, default='6')
     parser.add_argument('-n', '--samples', type=int, default=20)
     parser.add_argument('-r', '--repeats', type=int, default=100)
     parser.add_argument('-c', '--cutoff', type=float, default=1.0)
