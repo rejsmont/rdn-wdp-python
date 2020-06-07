@@ -60,6 +60,7 @@ class Clustering:
         self._find_centroids()
         if self._config.repeats > 1:
             self._cluster_centroids()
+            self._label_clusters()
         r = self._result
 
         if len(self._config.clusters) > 1:
@@ -236,6 +237,15 @@ class Clustering:
 
         r.status = 'clustered_centroids'
 
+    def _label_clusters(self):
+        c = self._config
+        r = self._result
+        clusters = self._create_labels()
+        cells = self._data.copy()
+        for i, n in enumerate(c.clusters):
+            cells = cells.join(clusters[i], on=['Sample', 'Nucleus'], how='inner')
+        r.cells = cells
+
     @classmethod
     def _cluster_controids_job(cls, cs, ss, c, n):
         cls._logger.info('Clustering controids (n=' + str(n) + ')')
@@ -298,6 +308,16 @@ class Clustering:
         cls._logger.info('Done (n=' + str(n) + ') in ' + str(i) + ' iterations. Score is ' + str(score))
         return cen
 
+    def _create_labels(self):
+        c = self._config
+        r = self._result
+        params = zip([r.clusters for _ in c.clusters], [r.centroids for _ in c.clusters],
+                     [c for _ in c.clusters], c.clusters)
+        with Pool(max(multiprocessing.cpu_count() - 1, 1)) as p:
+            clusters = p.starmap(Clustering._labels_job, params)
+
+        return clusters
+
     def _random_forest(self):
         c = self._config
         r = self._result
@@ -306,11 +326,7 @@ class Clustering:
 
         self._logger.info('Computing random forest classification')
 
-        params = zip([r.clusters for _ in c.clusters], [r.centroids for _ in c.clusters],
-                     [c for _ in c.clusters], c.clusters)
-        with Pool(max(multiprocessing.cpu_count() - 1, 1)) as p:
-            clusters = p.starmap(Clustering._random_forest_labels_job, params)
-
+        clusters = self._create_labels()
         cells = self._data.copy()
 
         # Exclude test data from training dataset for overfit estimation
@@ -342,7 +358,7 @@ class Clustering:
         self._logger.info('Predictions done')
 
     @classmethod
-    def _random_forest_labels_job(cls, clusters, centroids, c, n):
+    def _labels_job(cls, clusters, centroids, c, n):
 
         def cluster_mode(series):
             try:
