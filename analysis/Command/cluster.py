@@ -85,7 +85,9 @@ def run(a):
     if training is not None:
         logging.info("Will train on " + str(len(training.index)) + " cells")
 
-    clustering = Clustering(config, cells, training)
+    rf_parallel = not args.rf_no_parallel
+
+    clustering = Clustering(config, cells, training, rf_parallel=rf_parallel)
     if a.mode == 'classify':
         res = clustering.classify()
     elif a.mode == 'cluster':
@@ -109,6 +111,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--furrow', action='store_true')
     parser.add_argument('-d', '--mode', type=str, default='classify')
     parser.add_argument('--no-bad', action='store_true')
+    parser.add_argument('--rf-no-parallel', action='store_true')
     parser.add_argument('--log')
     parser.add_argument('output')
     args = parser.parse_args()

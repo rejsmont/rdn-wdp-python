@@ -32,7 +32,7 @@ class Clustering:
             self.status = 'empty'
             self.performance = {}
 
-    def __init__(self, config, data, training=None, test=None):
+    def __init__(self, config, data, training=None, test=None, rf_parallel=True):
         fields = config.hc_features + config.rf_features
         # Make sure that data does not contain NaNs in the fields used for clustering
         self._data = data.loc[data[fields].dropna().index]
@@ -49,6 +49,7 @@ class Clustering:
         else:
             # Make sure that test data does not contain NaNs in the fields used for clustering
             self._test = test.loc[test[fields].dropna().index]
+        self._rf_parallel = rf_parallel
 
     def cluster(self):
         if len(self._data.index.unique('Sample')) <= self._config.samples and self._config.repeats > 1:
@@ -311,10 +312,17 @@ class Clustering:
     def _create_labels(self):
         c = self._config
         r = self._result
+        p = self._rf_parallel
         params = zip([r.clusters for _ in c.clusters], [r.centroids for _ in c.clusters],
                      [c for _ in c.clusters], c.clusters)
-        with Pool(max(multiprocessing.cpu_count() - 1, 1)) as p:
-            clusters = p.starmap(Clustering._labels_job, params)
+        if p:
+            with Pool(max(multiprocessing.cpu_count() - 1, 1)) as p:
+                clusters = p.starmap(Clustering._labels_job, params)
+        else:
+            clusters = []
+            params = list(params)
+            for i in range(len(params)):
+                clusters.append(Clustering._labels_job(*params[i]))
 
         return clusters
 
