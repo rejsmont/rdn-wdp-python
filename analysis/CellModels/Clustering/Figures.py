@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from IPython.core.display import display
 from matplotlib import colors
 from matplotlib.lines import Line2D
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -16,7 +17,7 @@ class ClusterPlot(DiscPlot, LogScaleExtPlot):
             self._column = self._data.get_cluster_columns()[0]
         else:
             self._column = column
-        sort = self._cells.groupby(self._column)[[self._column]] \
+        sort = self._cells.fillna(0).groupby(self._column)[[self._column]] \
                           .transform(len).sort_values(self._column, ascending=False).index
         self._cells = self._cells.loc[sort]
 

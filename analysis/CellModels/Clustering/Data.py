@@ -4,7 +4,7 @@ from collections import Iterable
 import numpy as np
 import pandas as pd
 
-from typing import List, Union, Dict
+from typing import List, Union
 
 from CellModels.Cells.Tools import CellColumns
 from CellModels.Cluster import ClusteringResult as OriginalClusteringResult
@@ -215,15 +215,18 @@ class MultiClusteringResult(ClusteringResult):
 
 class HarmonizedClusteringResult(MultiClusteringResult, MultiClusteringTools):
 
-    def __init__(self, results):
-        if isinstance(results, MultiClusteringResult):
-            self._cells = results._cells
-            self._config = results._config
-        elif isinstance(results, list):
+    def __init__(self, results: Union[MultiClusteringResult, List[ClusteringResult]]):
+        if isinstance(results, list):
             super().__init__(results)
         else:
-            raise ValueError("Results must be a list or an instance of MultiClusteringResult")
-        harmonized = self._harmonize(self._cells, self._config.rf_features)
+            self._cells = results._cells
+            self._config = results._config
+            self._sample_sets = results._sample_sets
+            self._clusters = results._clusters
+            self._centroids = results._centroids
+            self._training = results._training
+            self._test = results._test
+        harmonized = self._harmonize(self._cells, self._config.rf_features, self._training)
         self._clusters_t = self._cluster_table(self._cells).join(self._cluster_table(harmonized),
                                                                  rsuffix=' harmonized').rename(
             columns={'Cluster harmonized': 'Harmonized cluster'})

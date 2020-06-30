@@ -48,12 +48,12 @@ class CellColumns:
             misc = {}
         tuples = []
         for i in lst:
-            if i in cls._cols.keys():
+            if not isinstance(i, str) and isinstance(i, Iterable):
+                tuples.append(tuple(i))
+            elif i in cls._cols.keys():
                 tuples.append(cls._cols[i])
             elif i in misc.keys():
                 tuples.append(misc[i])
-            elif not isinstance(i, str) and isinstance(i, Iterable):
-                tuples.append(tuple(i))
             else:
                 tuples.append((i, None))
 

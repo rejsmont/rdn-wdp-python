@@ -1,4 +1,5 @@
 import numpy as np
+from IPython.core.display import display
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 
@@ -39,9 +40,11 @@ class MultiClusteringTools(ClusteringTools):
             Count=df.groupby(column)[features].size()).rename_axis('Cluster', axis='index')
 
     @classmethod
-    def _harmonize(cls, df, features):
-        t = cls._cluster_table(df)
+    def _harmonize(cls, df, features, mask=None):
         nf = df.copy()
+        if mask is not None:
+            df = df.loc[mask.index]
+        t = cls._cluster_table(df)
         columns = t.columns
         column = None
         h_column = None
@@ -66,7 +69,7 @@ class MultiClusteringTools(ClusteringTools):
                             last += 1
                             v = last
                         t.loc[t[column] == n, h_column] = v
-                        nf.loc[df[column] == n, h_column] = v
+                        nf.loc[nf[column] == n, h_column] = v
 
                 t[column] = t[h_column]
                 t.drop(columns=h_column, inplace=True)

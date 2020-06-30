@@ -1,8 +1,10 @@
 import logging
 import os
 import os.path as path
+import pandas as pd
 import yaml
 
+from CellModels.Cells.Data import Cells
 from CellModels.Cells.IO import CellReader
 from CellModels.Clustering.Data import ClusteringConfig, ClusteringResult, MultiClusteringResult, SampleSets
 
@@ -11,10 +13,60 @@ class ClusteringReader:
 
     @classmethod
     def read(cls, p):
-        cells = CellReader.read(p)
-        config = ClusteringConfig(cells.metadata)
-        sample_sets = SampleSets(cells.metadata)
-        return ClusteringResult(cells, sample_sets, config)
+        if p.endswith('.h5') or p.endswith('.hdf5'):
+            try:
+                cells_df = pd.DataFrame(pd.read_hdf(p, 'clustering/cells'))
+                m = cls._read_metadata(p)
+                cells = Cells(cells_df, m)
+                config = ClusteringConfig(cells.metadata)
+                sample_sets = SampleSets(cells.metadata)
+            except Exception as e:
+                return None
+            try:
+                centroids = pd.DataFrame(pd.read_hdf(p, 'clustering/centroids'))
+            except:
+                centroids = None
+            try:
+                clusters = pd.DataFrame(pd.read_hdf(p, 'clustering/clusters'))
+            except:
+                clusters = None
+            try:
+                training = pd.DataFrame(pd.read_hdf(p, 'clustering/training'))
+            except:
+                training = None
+            try:
+                test = pd.DataFrame(pd.read_hdf(p, 'clustering/test'))
+            except:
+                test = None
+        else:
+            try:
+                cells = CellReader.read(p)
+                config = ClusteringConfig(cells.metadata)
+                sample_sets = SampleSets(cells.metadata)
+                centroids = None
+                clusters = None
+                training = None
+                test = None
+            except:
+                return None
+
+        if len(config.clusters) > 1:
+            return MultiClusteringResult(cells, sample_sets, config, clusters=clusters, centroids=centroids,
+                                         training=training, test=test)
+        else:
+            return ClusteringResult(cells, sample_sets, config, clusters=clusters, centroids=centroids,
+                                    training=training, test=test)
+
+    @staticmethod
+    def _read_metadata(p):
+        if not p.endswith('.yml'):
+            p = '.'.join(p.split('.')[:-1]) + '.yml'
+        try:
+            with open(p, 'r') as s:
+                m = yaml.safe_load(s)
+                return m
+        except:
+            return None
 
 
 class MultiClusteringReader:
