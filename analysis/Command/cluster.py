@@ -87,7 +87,7 @@ def run(a):
 
     rf_parallel = not args.rf_no_parallel
 
-    clustering = Clustering(config, cells, training, rf_parallel=rf_parallel)
+    clustering = Clustering(cells, config, training, rf_parallel=rf_parallel)
     if a.mode == 'classify':
         res = clustering.classify()
     elif a.mode == 'cluster':

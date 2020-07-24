@@ -338,3 +338,80 @@ class GeneClusteringPlot(Figure):
 
     def _size(self):
         return 15, 3.33 * (len(self._samples) + 2)
+
+
+class ComparativePlot(Figure):
+
+    def __init__(self, data_a, data_b, sample_a=None, sample_b=None, features=None, field=None):
+        super().__init__(None)
+
+        self._data = (data_a, data_b)
+        if features is None:
+            self._features = self._data[0].config.rf_features if features is None else features
+
+        if sample_a is None:
+            self._cells = (self._data[0].cells, self._data[1].cells)
+        else:
+            if sample_a == 'best':
+                sample_a = self._data[0].representative_sample()
+            if sample_b is None:
+                sample_b = sample_a
+            idx = pd.IndexSlice
+            self._cells = (self._data[0].cells.loc[idx[:, sample_a], :], self._data[1].cells.loc[idx[:, sample_b], :])
+        self._sample = (sample_a, sample_b)
+
+        if field is None:
+            for c in self._features:
+                if 'Measurements' in c and 'Normalized' in c:
+                    self._field = c
+        else:
+            self._field = field
+
+        self._linkage = (self._data[0].linkage(self._cells[0], self._features),
+                         self._data[1].linkage(self._cells[1], self._features))
+        self._columns = self._data[0].get_cluster_columns(self._cells[0])
+        self._best_clustering, self._m_dist = self._data[0].best_clustering()
+
+    def plot_axes(self, ax=None):
+        if ax is not None:
+            raise ValueError("Cannot specify axis for plot with subplots")
+        r = []
+        gs = self._fig.add_gridspec(5, 2)
+
+        for i in (0, 1):
+            dn = Dendrogram(self._data[i], None, self._features, self._data[i].cells)
+            r.append(dn.plot_axes(self._fig.add_subplot(gs[0, i])))
+            cp = CentroidPlot(self._data[i], None, self._best_clustering, self._features, self._data[i].cells)
+            r.append(cp.plot_axes(self._fig.add_subplot(gs[1, i])))
+            sp = SamplePlot(self._data[i], self._sample[i], self._field, self._cells[i])
+            r.append(sp.plot_axes(self._fig.add_subplot(gs[2, i])))
+            lp = ClusterPlot(self._data[i], self._sample[i], self._best_clustering, self._cells[i])
+            r.append(lp.plot_axes(self._fig.add_subplot(gs[3, i])))
+
+
+        ax = self._fig.add_subplot(gs[-1, 0])
+        ax.set_axis_off()
+        cax = inset_axes(ax, width="100%", height="10%", loc='upper left')
+        sp.plot_colorbar(cax, 'horizontal', self._fig)
+        lp.plot_legend(ax)
+        r.append(ax)
+
+        ax = self._fig.add_subplot(gs[-1, 1])
+        ax.set_axis_off()
+        cax = inset_axes(ax, width="100%", height="10%", loc='upper left')
+        cp.plot_colorbar(cax, 'horizontal', self._fig)
+        cp.plot_legend(ax, full=False)
+
+        ax = self._fig.add_subplot(gs[-1, 0:])
+        ax.set_axis_off()
+        cax = inset_axes(ax, width="100%", height="15%", loc='lower left')
+        text = 'Sample single-gene clustering plots: ' + str(
+            self._cells[0].index.unique(0)[0]) + ', sample ' + self._sample[0]
+        cax.text(0.5, 1, text, size='xx-large', ha='center')
+        cax.set_axis_off()
+        r.append(ax)
+
+        return r
+
+    def _size(self):
+        return 15, 5 * 5

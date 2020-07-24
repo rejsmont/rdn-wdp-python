@@ -95,12 +95,29 @@ class ClusteringConfig(CellColumns):
 
 class SampleSets(dict):
 
-    def __init__(self, m):
-        if 'clustering' in m.keys():
-            m = m['clustering']
-        samples = m.get('samples', None)
-        assert samples is not None, 'No sample sets were found in metadata.'
+    def __init__(self, m=None):
+        if m:
+            if 'clustering' in m.keys():
+                m = m['clustering']
+            samples = m.get('samples', None)
+            assert samples is not None, 'No sample sets were found in metadata.'
+        else:
+            samples = {}
         super().__init__(samples)
+
+
+class Performance(dict):
+
+    def __init__(self, m=None):
+        if m:
+            if 'clustering' in m.keys():
+                m = m['clustering']
+            performance = m.get('performance', None)
+            if performance is None:
+                performance = {}
+        else:
+            performance = {}
+        super().__init__(performance)
 
 
 class ClusteringResult(OriginalClusteringResult, ClusteringTools):
@@ -156,7 +173,7 @@ class ClusteringResult(OriginalClusteringResult, ClusteringTools):
 
     @classmethod
     def _set_multi_index(cls, data: pd.DataFrame, config: ClusteringConfig):
-        e = [np.nan for x in range(data.columns.nlevels - 1)]
+        e = [np.nan for _ in range(data.columns.nlevels - 1)]
         n = [
             tuple(['Cluster_' + config.method] + e),
             tuple(['Cluster_' + config.method + '_' + str(config.clusters[0])] + e)

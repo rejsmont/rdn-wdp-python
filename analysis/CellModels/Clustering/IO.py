@@ -6,7 +6,8 @@ import yaml
 
 from CellModels.Cells.Data import Cells
 from CellModels.Cells.IO import CellReader
-from CellModels.Clustering.Data import ClusteringConfig, ClusteringResult, MultiClusteringResult, SampleSets
+from CellModels.Clustering.Data import ClusteringConfig, ClusteringResult, MultiClusteringResult, SampleSets, \
+    Performance
 
 
 class ClusteringReader:
@@ -18,9 +19,7 @@ class ClusteringReader:
                 cells_df = pd.DataFrame(pd.read_hdf(p, 'clustering/cells'))
                 m = cls._read_metadata(p)
                 cells = Cells(cells_df, m)
-                config = ClusteringConfig(cells.metadata)
-                sample_sets = SampleSets(cells.metadata)
-            except Exception as e:
+            except:
                 return None
             try:
                 centroids = pd.DataFrame(pd.read_hdf(p, 'clustering/centroids'))
@@ -41,8 +40,6 @@ class ClusteringReader:
         else:
             try:
                 cells = CellReader.read(p)
-                config = ClusteringConfig(cells.metadata)
-                sample_sets = SampleSets(cells.metadata)
                 centroids = None
                 clusters = None
                 training = None
@@ -50,12 +47,19 @@ class ClusteringReader:
             except:
                 return None
 
+        try:
+            config = ClusteringConfig(cells.metadata)
+            sample_sets = SampleSets(cells.metadata)
+            performance = Performance(cells.metadata)
+        except:
+            return None
+
         if len(config.clusters) > 1:
             return MultiClusteringResult(cells, sample_sets, config, clusters=clusters, centroids=centroids,
-                                         training=training, test=test)
+                                         training=training, test=test, performance=performance)
         else:
             return ClusteringResult(cells, sample_sets, config, clusters=clusters, centroids=centroids,
-                                    training=training, test=test)
+                                    training=training, test=test, performance=performance)
 
     @staticmethod
     def _read_metadata(p):
@@ -65,7 +69,7 @@ class ClusteringReader:
             with open(p, 'r') as s:
                 m = yaml.safe_load(s)
                 return m
-        except:
+        except Exception as e:
             return None
 
 
