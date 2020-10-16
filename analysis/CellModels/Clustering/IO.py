@@ -44,14 +44,14 @@ class ClusteringReader:
                 clusters = None
                 training = None
                 test = None
-            except:
-                return None
+            except Exception as e:
+                raise e
 
         try:
             config = ClusteringConfig(cells.metadata)
             sample_sets = SampleSets(cells.metadata)
             performance = Performance(cells.metadata)
-        except:
+        except Exception as e:
             return None
 
         if len(config.clusters) > 1:

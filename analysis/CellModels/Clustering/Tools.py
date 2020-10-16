@@ -1,5 +1,4 @@
 import numpy as np
-from IPython.core.display import display
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 

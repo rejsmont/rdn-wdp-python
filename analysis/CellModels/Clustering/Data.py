@@ -31,10 +31,15 @@ class ClusteringConfig(CellColumns):
     ]
 
     def __init__(self, m):
+        if 'classification' in m.keys():
+            t = m['classification']
+        else:
+            t = {}
         if 'clustering' in m.keys():
             m = m['clustering']
         if 'config' in m.keys():
             m = m['config']
+        m.update(t)
         c = m.get('clusters', None)
         self._clusters = [int(i) for i in (c if isinstance(c, Iterable) else [c])]
         assert self._clusters is not None, 'Number of clusters must be specified.'
@@ -92,14 +97,24 @@ class ClusteringConfig(CellColumns):
             'hc_features': [list(x) if isinstance(x, tuple) else x for x in self.hc_features]
         }
 
+    def __repr__(self):
+        return self.to_dict().__repr__()
+
 
 class SampleSets(dict):
 
     def __init__(self, m=None):
         if m:
+            if 'classification' in m.keys():
+                t = m['classification']
+            else:
+                t = {}
             if 'clustering' in m.keys():
                 m = m['clustering']
+            m.update(t)
             samples = m.get('samples', None)
+            if not isinstance(samples, Iterable):
+                samples = m.get('sets', None)
             assert samples is not None, 'No sample sets were found in metadata.'
         else:
             samples = {}
