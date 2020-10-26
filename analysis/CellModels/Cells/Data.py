@@ -58,7 +58,9 @@ class Cells(pd.DataFrame, CellColumns):
         raise NotImplementedError("Not supported for Cells!")
 
     @staticmethod
-    def _check_clean_up(v: Union[Callable, Iterable, None] = CleanUp.all):
+    def _check_clean_up(v: Union[Callable, Iterable, None]):
+        if v is None:
+            v = CleanUp.all
         if isinstance(v, Callable):
             v = [v]
         elif isinstance(v, Iterable):

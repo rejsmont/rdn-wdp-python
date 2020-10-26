@@ -68,7 +68,7 @@ class CleanUp:
     _logger = logging.getLogger('cell-reader')
 
     SYNONYMS = {'CG1625': 'dila', 'CG6860': 'Lrch', 'CG8965': 'rau', 'HLHmdelta': 'E(spl)mdelta-HLH',
-                'king-tubby': 'ktub', 'n-syb': 'nSyb'}
+                'king-tubby': 'ktub', 'n-syb': 'nSyb', 'Vn': 'vn', 'lola-P': 'lola'}
 
     @classmethod
     def remove_artifacts(cls, cells):
