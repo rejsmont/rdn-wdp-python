@@ -5,6 +5,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Union, Set, Optional, Callable
 
+from IPython.core.display import display
+
 from CellModels.Cells.Tools import CleanUp, CellColumns
 
 

@@ -85,7 +85,12 @@ class CleanUp:
     def mark_bad_samples(cls, cells):
         if 'CG9801' in cells.index.unique('Gene'):
             cls._logger.debug("Marking bad CG9801 samples...")
-            cells.loc[Masks(cells).samples_bad_segm, 'Gene'] = 'CG9801-B'
+            n = cells.index.names
+            cells.reset_index(inplace=True, level='Gene')
+            cells.loc[Masks(cells).samples_bad_segm, ['Gene']] = 'CG9801-B'
+            cells.reset_index(inplace=True)
+            cells.set_index(n, inplace=True)
+            cells.sort_index(inplace=True)
 
     @classmethod
     def rename_cgs(cls, cells):
