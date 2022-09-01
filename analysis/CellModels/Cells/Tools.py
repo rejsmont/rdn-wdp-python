@@ -78,7 +78,7 @@ class CleanUp:
             mask = (cells[('Position', 'Normalized', 'y')] > 35) & \
                    (cells[('Position', 'Normalized', 'x')] > 20) & \
                    (cells[('Position', 'Normalized', 'x')] < 30)
-            artifact = cells.loc[idx[mask, 'ZBO7IH'], :].index
+            artifact = cells.loc[idx[:, 'ZBO7IH'], :].index.intersection(cells.loc[mask].index)
             cells.drop(artifact, inplace=True)
 
     @classmethod
